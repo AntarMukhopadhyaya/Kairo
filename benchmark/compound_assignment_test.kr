@@ -1,0 +1,32 @@
+var x = 10;
+print("Initial x:", x);
+
+x += 5;
+print("After x += 5:", x);
+
+x -= 3;
+print("After x -= 3:", x);
+
+x *= 2;
+print("After x *= 2:", x);
+
+x /= 4;
+print("After x /= 4:", x);
+
+var obj = {count: 100};
+print("Initial obj.count:", obj.count);
+
+obj.count += 25;
+print("After obj.count += 25:", obj.count);
+
+obj.count -= 10;
+print("After obj.count -= 10:", obj.count);
+
+var arr = [5, 10, 15];
+print("Initial arr[1]:", arr[1]);
+
+arr[1] += 20;
+print("After arr[1] += 20:", arr[1]);
+
+arr[2] *= 2;
+print("After arr[2] *= 2:", arr[2]);

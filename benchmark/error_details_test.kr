@@ -1,0 +1,53 @@
+print("=== Error Propagation with Error Variable Access ===");
+print("");
+
+print("Test 1: Accessing error variable");
+try {
+    var result = 100 / 0;
+} catch Exception err {
+    print("Error caught:");
+    print("  Error object:", err);
+}
+
+print("");
+print("Test 2: Type mismatch");
+try {
+    var invalid = "text" - 42;
+} catch TypeError te {
+    print("Type error details:");
+    print("  Error:", te);
+}
+
+print("");
+print("Test 3: Multiple operations - first to fail is caught");
+try {
+    var a = 5 + 3;
+    print("  a =", a);
+    var b = 10 * 2;
+    print("  b =", b);
+    var c = b / 0;
+    print("  Should not print this");
+    var d = a + b;
+} catch Exception e {
+    print("Caught at division:", e);
+}
+
+print("");
+print("Test 4: Nested try-catch with errors");
+try {
+    print("Outer try");
+    try {
+        print("  Inner try");
+        var x = 15 % 0;
+    } catch Exception inner {
+        print("  Inner catch:", inner);
+        print("  Attempting another error...");
+        var y = "hello" * [1, 2];
+    }
+    print("Should not reach here");
+} catch Exception outer {
+    print("Outer catch:", outer);
+}
+
+print("");
+print("All tests completed!");

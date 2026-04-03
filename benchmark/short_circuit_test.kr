@@ -1,0 +1,36 @@
+var called = false;
+
+fn sideEffect() {
+    called = true;
+    return true;
+}
+
+called = false;
+var result1 = false && sideEffect();
+print("Test 1 - false && sideEffect():");
+print(result1);
+print(called);
+
+called = false;
+var result2 = true && sideEffect();
+print("Test 2 - true && sideEffect():");
+print(result2);
+print(called);
+
+var callCount = 0;
+fn increment() {
+    callCount = callCount + 1;
+    return false;
+}
+
+callCount = 0;
+var result3 = true || increment();
+print("Test 3 - true || increment():");
+print(result3);
+print(callCount);
+
+callCount = 0;
+var result4 = false || increment();
+print("Test 4 - false || increment():");
+print(result4);
+print(callCount);

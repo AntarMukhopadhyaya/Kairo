@@ -1,0 +1,53 @@
+print("=== Testing Error Propagation ===");
+print("");
+
+print("Test 1: Division by Zero");
+try {
+    print("Before division");
+    var result = 10 / 0;
+    print("After division (should not reach here)");
+    print("Result:", result);
+} catch Exception e {
+    print("Caught error:", e);
+} finally {
+    print("Finally block executed");
+}
+
+print("");
+print("Test 2: Type Error - Invalid Addition");
+try {
+    var x = "hello";
+    var y = [1, 2, 3];
+    print("Attempting invalid operation...");
+    var z = x - y;
+    print("Should not reach here");
+} catch TypeError err {
+    print("Caught type error:", err);
+} finally {
+    print("Cleanup after type error");
+}
+
+print("");
+print("Test 3: No Error - Normal Flow");
+try {
+    var a = 10;
+    var b = 5;
+    var c = a / b;
+    print("Division successful:", c);
+} catch Exception e {
+    print("Should not catch:", e);
+} finally {
+    print("Always executed");
+}
+
+print("");
+print("Test 4: Modulo by Zero");
+try {
+    var x = 15 % 0;
+    print("Should not reach here");
+} catch Exception e {
+    print("Caught modulo error:", e);
+}
+
+print("");
+print("All error propagation tests completed!");

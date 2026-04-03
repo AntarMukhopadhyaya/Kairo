@@ -1,0 +1,20 @@
+
+var a = {name: "Antar",roll:21};
+print(a)
+print(a.name)
+print(a.name == "Antar")
+
+
+var i = 0;
+
+while(i  < 10){
+    print(i);
+    i = i + 1;
+}
+import upper,lower,split,join from "string";
+
+
+print(upper("hello"));
+print(lower("HELLO"));
+print(split("a,b,c", ","));
+print(join(["a","b","c"], "-"));

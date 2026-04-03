@@ -1,0 +1,219 @@
+print("LOOP CONTROL COMPREHENSIVE START")
+
+var t1i = 0;
+var t1sum = 0;
+while(t1i < 10){
+    t1i = t1i + 1;
+    if(t1i % 2 == 0){
+        continue
+    }
+    if(t1i == 9){
+        break
+    }
+    t1sum = t1sum + t1i;
+}
+print("T1 WHILE CONTINUE BREAK")
+print(t1sum)
+print(t1sum == 16)
+
+var t2sum = 0;
+for (var t2j = 0; t2j < 10; t2j = t2j + 1){
+    if(t2j == 2){
+        continue
+    }
+    if(t2j == 6){
+        break
+    }
+    t2sum = t2sum + t2j;
+}
+print("T2 FOR CONTINUE BREAK")
+print(t2sum)
+print(t2sum == 13)
+
+var t3outer = 0;
+var t3innerhits = 0;
+while(t3outer < 4){
+    var t3inner = 0;
+    t3outer = t3outer + 1;
+    while(t3inner < 5){
+        t3inner = t3inner + 1;
+        if(t3inner == 2){
+            continue
+        }
+        if(t3inner == 4){
+            break
+        }
+        t3innerhits = t3innerhits + 1;
+    }
+}
+print("T3 NESTED WHILE")
+print(t3innerhits)
+print(t3innerhits == 8)
+
+var t4total = 0;
+for (var t4i = 0; t4i < 4; t4i = t4i + 1){
+    for (var t4j = 0; t4j < 5; t4j = t4j + 1){
+        if(t4j == 1){
+            continue
+        }
+        if(t4j == 3){
+            break
+        }
+        t4total = t4total + (t4i * 10 + t4j);
+    }
+}
+print("T4 NESTED FOR")
+print(t4total)
+print(t4total == 128)
+
+var t5sum = 0;
+var t5i = 0;
+while(t5i < 3){
+    for (var t5j = 0; t5j < 6; t5j = t5j + 1){
+        if(t5j == 0){
+            continue
+        }
+        if(t5j == 4){
+            break
+        }
+        t5sum = t5sum + (t5i * 100 + t5j);
+    }
+    t5i = t5i + 1;
+}
+print("T5 WHILE FOR MIX")
+print(t5sum)
+print(t5sum == 918)
+
+var t6sum = 0;
+for (var t6i = 0; t6i < 6; t6i = t6i + 1){
+    if(t6i == 2){
+        continue
+    }
+    if(t6i == 5){
+        break
+    }
+    var t6j = 0;
+    while(t6j < 4){
+        t6j = t6j + 1;
+        if(t6j == 3){
+            continue
+        }
+        if(t6j == 4){
+            break
+        }
+        t6sum = t6sum + (t6i * 10 + t6j);
+    }
+}
+print("T6 FOR WHILE MIX")
+print(t6sum)
+print(t6sum == 172)
+
+var t7sum = 0;
+for (var t7i = 0; t7i < 5; t7i = t7i + 1){
+    try {
+        if(t7i == 2){
+            continue
+        }
+        if(t7i == 4){
+            break
+        }
+        t7sum = t7sum + t7i;
+    } catch Error e {
+    }
+}
+print("T7 BREAK CONTINUE IN TRY")
+print(t7sum)
+print(t7sum == 4)
+
+var t8count = 0;
+for (var t8i = 0; t8i < 6; t8i = t8i + 1){
+    try {
+        if(t8i == 1){
+        }
+    } catch Error e {
+        if(t8i == 3){
+            break
+        }
+        t8count = t8count + 1;
+    }
+    t8count = t8count + 1;
+}
+print("T8 BREAK IN CATCH")
+print(t8count)
+print(t8count == 6)
+
+var t9sum = 0;
+for (var t9i = 0; t9i < 6; t9i = t9i + 1){
+    try {
+        if(t9i == 2){
+        }
+    } catch Error e {
+        if(t9i == 3){
+            continue
+        }
+        t9sum = t9sum + 1;
+    }
+    if(t9i < 5){
+        t9sum = t9sum + 1;
+    }
+}
+print("T9 CONTINUE IN CATCH")
+print(t9sum)
+print(t9sum == 5)
+
+var t10sum = 0;
+var t10outer = 0;
+while(t10outer < 3){
+    t10outer = t10outer + 1;
+    for (var t10i = 0; t10i < 4; t10i = t10i + 1){
+        try {
+            if(t10i == 1){
+                continue
+            }
+            if(t10i == 3){
+                break
+            }
+            t10sum = t10sum + t10i;
+        } catch Error e {
+        }
+    }
+}
+print("T10 NESTED TRY IN LOOP")
+print(t10sum)
+print(t10sum == 6)
+
+var t11processed = 0;
+for (var t11i = 0; t11i < 5; t11i = t11i + 1){
+    try {
+        if(t11i == 4){
+            break
+        }
+        t11processed = t11processed + 1;
+    } catch Error e {
+        t11processed = t11processed + 100;
+    }
+}
+print("T11 TRY SUCCESS THEN BREAK")
+print(t11processed)
+print(t11processed == 4)
+
+var t12hitcount = 0;
+for (var t12i = 0; t12i < 3; t12i = t12i + 1){
+    for (var t12j = 0; t12j < 3; t12j = t12j + 1){
+        try {
+            if(t12j == 1){
+                continue
+            }
+            if(t12j == 2){
+                break
+            }
+            t12hitcount = t12hitcount + 1;
+        } catch Error e {
+        }
+    }
+}
+print("T12 NESTED LOOPS WITH TRY")
+print(t12hitcount)
+print(t12hitcount == 3)
+
+print("LOOP CONTROL COMPREHENSIVE END")

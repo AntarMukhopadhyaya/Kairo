@@ -1,0 +1,48 @@
+print("=== Testing Try-Catch-Finally with Error Handling ===");
+
+try {
+    print("Try block: Starting");
+    var nums = [1, 2, 3];
+    print("Array:", nums);
+} catch Exception e {
+    print("Caught exception:", e);
+} finally {
+    print("Finally: Cleanup for first block");
+}
+
+print("");
+print("=== Multiple Catch Blocks ===");
+
+try {
+    print("Try block: Working with data");
+    var result = 10 + 20;
+    print("Calculation result:", result);
+} catch RuntimeError err {
+    print("Runtime error caught:", err);
+} catch TypeError te {
+    print("Type error caught:", te);
+} finally {
+    print("Finally: Multi-catch cleanup");
+}
+
+print("");
+print("=== Nested Try-Catch ===");
+
+try {
+    print("Outer try block");
+    try {
+        print("Inner try block");
+        var x = 5;
+    } catch Exception inner {
+        print("Inner catch:", inner);
+    } finally {
+        print("Inner finally");
+    }
+} catch Exception outer {
+    print("Outer catch:", outer);
+} finally {
+    print("Outer finally");
+}
+
+print("");
+print("All tests completed successfully!");

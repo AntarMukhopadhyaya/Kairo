@@ -1,0 +1,75 @@
+print("=== YOUR EXACT TEST CASE ===")
+print("Testing: while(true) { try { break } finally { cleanup } }")
+
+var finallyCount = 0;
+
+while (true) {
+    try {
+        print("in try, before break")
+        break
+        print("SHOULD NOT PRINT - after break in try")
+    } finally {
+        finallyCount = finallyCount + 1;
+        print("in finally, cleanup executed")
+    }
+}
+
+print("after while loop")
+print("finallyCount: " + finallyCount)
+print("")
+
+print("=== TEST: continue in try with finally ===")
+
+var contTest = 0;
+for (var i = 0; i < 3; i = i + 1){
+    try {
+        print("i=" + i)
+        if(i == 1){
+            print("  continue in try")
+            continue
+            print("  SHOULD NOT PRINT - after continue")
+        }
+        contTest = contTest + 1;
+        print("  normal path")
+    } finally {
+        print("  finally for i=" + i)
+    }
+}
+print("after for loop")
+print("contTest: " + contTest)
+print("")
+
+print("=== TEST: error thrown, finally still runs ===")
+
+var errorFinallyCount = 0;
+for (var i = 0; i < 1; i = i + 1){
+    try {
+        print("i=" + i + " in try")
+        print(nonexistentVar)
+        print("SHOULD NOT PRINT - after error")
+    } catch Error e {
+        print("caught error")
+    } finally {
+        errorFinallyCount = errorFinallyCount + 1;
+        print("finally still ran after error")
+    }
+}
+print("errorFinallyCount: " + errorFinallyCount)
+print("")
+
+print("=== TEST: break in try, then finally ===")
+
+var breakFinallyTest = 0;
+while(breakFinallyTest < 5){
+    breakFinallyTest = breakFinallyTest + 1;
+    try {
+        print("attempt " + breakFinallyTest)
+        if(breakFinallyTest == 3){
+            print("  breaking at 3")
+            break
+        }
+    } finally {
+        print("  finally for attempt " + breakFinallyTest)
+    }
+}
+print("final breakFinallyTest: " + breakFinallyTest)

@@ -1,0 +1,24 @@
+print("Testing try-catch-finally:");
+
+try {
+    print("In try block");
+    var x = 10;
+    print("x =", x);
+} catch Exception e {
+    print("Caught exception:", e);
+} finally {
+    print("Finally block executed");
+}
+
+print("After try-catch-finally");
+
+try {
+    print("Try block 2");
+    var y = 20;
+} catch Error err {
+    print("Error caught:", err);
+} finally {
+    print("Finally 2");
+}
+
+print("Done");

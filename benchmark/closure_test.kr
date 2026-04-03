@@ -1,0 +1,13 @@
+fn outer() {
+  var x = 1;
+  fn inner() {
+    x = x + 1;
+    print(x);
+  };
+  return inner;
+};
+
+var a = outer();
+a();
+a();
+a();

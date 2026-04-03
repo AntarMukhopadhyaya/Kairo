@@ -1,0 +1,29 @@
+.idea
+.env
+.env.local
+.env.development
+.env.test
+.vscode
+*.log
+# Ignore compiled binaries
+*.exe
+*.dll
+*.so
+# Ignore build artifacts
+/build/
+/target/
+# Ignore IDE-specific files
+*.iml
+.idea/
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+# Ignore Go-specific files
+/bin/
+/pkg/
+docs/
+
+# Benchmark-generated artifacts
+benchmark/*.kbc
+benchmark/*.slbc
+benchmark/*_RESULTS.md

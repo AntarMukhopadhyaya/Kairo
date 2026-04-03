@@ -1,0 +1,11 @@
+print("Simple error test");
+
+try {
+    print("Before error");
+    var x = 10 / 0;
+    print("After error");
+} catch Exception e {
+    print("Caught!");
+}
+
+print("Done");

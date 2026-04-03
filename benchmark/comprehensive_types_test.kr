@@ -1,0 +1,22 @@
+var x: number = 42;
+var message: string = "Hello, SlimScript!";
+
+fn add(a: number, b: number): number {
+  var result: number = a + b;
+  print(result);
+}
+
+fn greet(name: string): string {
+  print(name);
+}
+
+fn multiply(x: number, y: number): number {
+  var product: number = x * y;
+  print(product);
+}
+
+add(5, 10);
+greet("World");
+multiply(3, 7);
+print(x);
+print(message);

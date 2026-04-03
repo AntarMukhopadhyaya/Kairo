@@ -1,0 +1,17 @@
+var x: number = 10;
+var name: string = "Alice";
+var y: number = 20;
+
+fn add(a: number, b: number): number {
+  var result: number = a + b;
+  print(result);
+}
+
+add(x, y);
+print(name);
+
+fn greet(person: string): string {
+  print(person);
+}
+
+greet("Bob");

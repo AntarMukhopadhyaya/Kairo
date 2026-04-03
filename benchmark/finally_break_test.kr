@@ -1,0 +1,60 @@
+print("TEST: finally with break in try - CRITICAL TEST")
+
+var cleanupRan = 0;
+var count = 0;
+while (count < 1){
+    count = count + 1;
+    try {
+        print("in try, about to break")
+        break
+    } catch Error e {
+        print("in catch")
+    }
+}
+print("after while")
+print("TEST RESULT: break in try, finally not present yet")
+
+print("")
+print("TEST: try/catch/finally with break")
+
+var finallyCount = 0;
+var iter = 0;
+while (iter < 3){
+    iter = iter + 1;
+    try {
+        print("iteration " + iter + " - in try")
+        if(iter == 2){
+            print("  breaking at iter 2")
+            break
+        }
+        print("  continuing")
+    } catch Error e {
+        print("in catch (should not run)")
+    }
+}
+print("broken out of while at iter: " + iter)
+
+print("")
+print("TEST: nested try in loop with break")
+
+var outerIdx = 0;
+var innerIdxHits = 0;
+while(outerIdx < 2){
+    outerIdx = outerIdx + 1;
+    print("outer " + outerIdx)
+    for (var j = 0; j < 4; j = j + 1){
+        try {
+            print("  j=" + j)
+            if(j == 2){
+                print("    breaking at j=2")
+                break
+            }
+            innerIdxHits = innerIdxHits + 1;
+        } catch Error e {
+        }
+    }
+    print("  inner for broke, continuing outer")
+}
+print("final innerIdxHits: " + innerIdxHits)
+print("final outerIdx: " + outerIdx)
+

@@ -1,0 +1,57 @@
+print("=== String Methods ===");
+var greeting = "hello";
+print("Original:", greeting);
+print("toUpperCase:", greeting.toUpperCase());
+print("toLowerCase:", "WORLD".toLowerCase());
+print("charAt(1):", greeting.charAt(1));
+print("includes('ll'):", greeting.includes("ll"));
+print("includes('x'):", greeting.includes("x"));
+print("indexOf('l'):", greeting.indexOf("l"));
+print("trim:", "  spaces  ".trim());
+print("substring(1,4):", greeting.substring(1, 4));
+print("replace('l','L'):", greeting.replace("l", "L"));
+
+var text = "a,b,c";
+print("split(','):", text.split(","));
+
+print("");
+print("=== Array Methods ===");
+var arr = [1, 2, 3];
+print("Original array:", arr);
+print("push(4,5):", arr.push(4, 5));
+print("After push:", arr);
+
+var arr2 = [10, 20, 30, 40];
+print("pop:", arr2.pop());
+print("After pop:", arr2);
+
+var arr3 = [1, 2, 3, 4, 5];
+print("slice(1,4):", arr3.slice(1, 4));
+print("join(','):", arr3.join(","));
+
+var arr4 = ["a", "b", "c"];
+print("includes('b'):", arr4.includes("b"));
+print("includes('x'):", arr4.includes("x"));
+print("indexOf('c'):", arr4.indexOf("c"));
+
+var arr5 = [3, 1, 2];
+arr5.reverse();
+print("reverse:", arr5);
+
+print("");
+print("=== Map Methods ===");
+var person = {name: "Alice", age: 30, city: "NYC"};
+print("Original map:", person);
+print("keys:", person.keys());
+print("values:", person.values());
+print("hasKey('name'):", person.hasKey("name"));
+print("hasKey('email'):", person.hasKey("email"));
+
+print("");
+print("=== Method Chaining ===");
+var temp = "  HELLO WORLD  ".trim();
+var result = temp.toLowerCase();
+print("Chained result:", result);
+
+print("");
+print("=== Tests Complete ===");

@@ -1,0 +1,118 @@
+package vm
+
+type OpCode uint8
+
+const (
+	OP_LOAD_CONST OpCode = iota
+	OP_DEFINE_GLOBAL
+	OP_GET_GLOBAL
+	OP_SET_GLOBAL
+	OP_ADD
+	OP_SUB
+	OP_MUL
+	OP_DIV
+	OP_EQUAL
+	OP_NOT_EQUAL
+	OP_GREATER
+	OP_GREATER_EQUAL
+	OP_LESS
+	OP_LESS_EQUAL
+	OP_NOT
+	OP_JUMP
+	OP_JUMP_IF_FALSE
+	OP_JUMP_IF_TRUE
+	OP_LOOP
+	OP_CALL
+	OP_CLOSURE
+	OP_GET_UPVALUE
+	OP_SET_UPVALUE
+	OP_BUILD_ARRAY
+	OP_BUILD_MAP
+	OP_GET_PROPERTY
+	OP_SET_PROPERTY
+	OP_RETURN
+	OP_POP
+
+	OP_GET_LOCAL
+	OP_SET_LOCAL
+	OP_GET_INDEX
+	OP_SET_INDEX
+	OP_DEFINE_TYPED_GLOBAL
+	OP_MOVE
+	OP_LOAD_MODULE
+	OP_TRY_BEGIN
+	OP_TRY_END
+	OP_THROW
+	OP_MOD
+	OP_CALL_METHOD
+	OP_NOP
+	OP_ADD_INT
+	OP_ADD_FLOAT
+	OP_ADD_STR
+	OP_ADD_LOCAL
+	OP_SUB_LOCAL
+	OP_MUL_LOCAL
+)
+
+// OpCodeCount is the total number of opcodes.
+// Useful for fixed-size profiling arrays.
+const OpCodeCount = int(OP_MUL_LOCAL) + 1
+
+var opCodeNames = []string{
+	"OP_LOAD_CONST",
+	"OP_DEFINE_GLOBAL",
+	"OP_GET_GLOBAL",
+	"OP_SET_GLOBAL",
+	"OP_ADD",
+	"OP_SUB",
+	"OP_MUL",
+	"OP_DIV",
+	"OP_EQUAL",
+	"OP_NOT_EQUAL",
+	"OP_GREATER",
+	"OP_GREATER_EQUAL",
+	"OP_LESS",
+	"OP_LESS_EQUAL",
+	"OP_NOT",
+	"OP_JUMP",
+	"OP_JUMP_IF_FALSE",
+	"OP_JUMP_IF_TRUE",
+	"OP_LOOP",
+	"OP_CALL",
+	"OP_CLOSURE",
+	"OP_GET_UPVALUE",
+	"OP_SET_UPVALUE",
+	"OP_BUILD_ARRAY",
+	"OP_BUILD_MAP",
+	"OP_GET_PROPERTY",
+	"OP_SET_PROPERTY",
+	"OP_RETURN",
+	"OP_POP",
+	"OP_GET_LOCAL",
+	"OP_SET_LOCAL",
+	"OP_GET_INDEX",
+	"OP_SET_INDEX",
+	"OP_DEFINE_TYPED_GLOBAL",
+	"OP_MOVE",
+	"OP_LOAD_MODULE",
+	"OP_TRY_BEGIN",
+	"OP_TRY_END",
+	"OP_THROW",
+	"OP_MOD",
+	"OP_CALL_METHOD",
+	"OP_NOP",
+	"OP_ADD_INT",
+	"OP_ADD_FLOAT",
+	"OP_ADD_STR",
+	"OP_ADD_LOCAL",
+	"OP_SUB_LOCAL",
+	"OP_MUL_LOCAL",
+}
+
+func OpCodeName(op OpCode) string {
+	idx := int(op)
+	if idx >= 0 && idx < len(opCodeNames) {
+		return opCodeNames[idx]
+	}
+	return "OP_UNKNOWN"
+}
