@@ -848,7 +848,7 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				if value.IsStringLike(idx) {
 					obj.AsMap().Properties[idx.ToString()] = val
 				}
-				}
+			}
 
 		case OP_LOAD_MODULE:
 			dest := instr.A
