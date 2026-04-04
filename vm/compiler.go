@@ -18,6 +18,8 @@ type Compiler struct {
 	nextReg     int
 	MaxRegUsed  int
 	optimizer   *Optimizer
+	currentLine int
+	currentCol  int
 }
 type LoopContext struct {
 	breakJumps    []int
@@ -147,8 +149,8 @@ func (c *Compiler) Compile(program frontend.Program) *Chunk {
 		c.compileStatement(stmt)
 	}
 	resultReg := c.newRegister()
-	c.chunk.Emit(OP_LOAD_CONST, resultReg, c.chunk.AddConstant(value.MakeNull()), 0)
-	c.chunk.Emit(OP_RETURN, resultReg, 0, 0)
+	c.emit(OP_LOAD_CONST, resultReg, c.chunk.AddConstant(value.MakeNull()), 0)
+	c.emit(OP_RETURN, resultReg, 0, 0)
 	if c.optimizer != nil {
 		c.optimizer.Optimize()
 	}
@@ -173,6 +175,17 @@ func (c *Compiler) OptimizationStats() (OptimizationStats, bool) {
 }
 
 func (c *Compiler) compileStatement(stmt frontend.Statement) {
+	prevLine, prevCol := c.currentLine, c.currentCol
+	line, col := statementLocation(stmt)
+	if line > 0 {
+		c.currentLine = line
+		c.currentCol = col
+	}
+	defer func() {
+		c.currentLine = prevLine
+		c.currentCol = prevCol
+	}()
+
 	switch s := stmt.(type) {
 	case frontend.VariableDeclaration:
 		valueReg := c.compileExpression(s.Value)
@@ -190,7 +203,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 			if declType != "" {
 				current.types[s.Identifier] = declType
 			}
-			c.chunk.Emit(OP_MOVE, slot, valueReg, 0)
+			c.emit(OP_MOVE, slot, valueReg, 0)
 			c.freeRegister(valueReg)
 		} else {
 			// Global scope
@@ -200,9 +213,9 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 			}
 			if s.TypeAnnotation != "" {
 				typeIdx := c.chunk.AddConstant(value.MakeString(s.TypeAnnotation))
-				c.chunk.Emit(OP_DEFINE_TYPED_GLOBAL, valueReg, slot, typeIdx)
+				c.emit(OP_DEFINE_TYPED_GLOBAL, valueReg, slot, typeIdx)
 			} else {
-				c.chunk.Emit(OP_DEFINE_GLOBAL, valueReg, slot, 0)
+				c.emit(OP_DEFINE_GLOBAL, valueReg, slot, 0)
 			}
 			c.freeRegister(valueReg)
 		}
@@ -272,7 +285,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 		}
 		c.exitScope()
 		offset := loopStart - len(c.chunk.Code) - 1
-		c.chunk.Emit(OP_JUMP, offset, 0, 0)
+		c.emit(OP_JUMP, offset, 0, 0)
 		c.patchJumpIfFalse(exitJump)
 		// pop loop context
 
@@ -307,8 +320,8 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 			slot := c.getGlobalSlot(spec.Local)
 			constIdx := c.chunk.AddConstant(exportValue)
 			tempReg := c.newRegister()
-			c.chunk.Emit(OP_LOAD_CONST, tempReg, constIdx, 0)
-			c.chunk.Emit(OP_DEFINE_GLOBAL, tempReg, slot, 0)
+			c.emit(OP_LOAD_CONST, tempReg, constIdx, 0)
+			c.emit(OP_DEFINE_GLOBAL, tempReg, slot, 0)
 			c.freeRegister(tempReg)
 		}
 
@@ -338,7 +351,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 			c.compileStatement(s.Iteration)
 		}
 		offset := conditionStart - len(c.chunk.Code) - 1
-		c.chunk.Emit(OP_JUMP, offset, 0, 0)
+		c.emit(OP_JUMP, offset, 0, 0)
 		if s.Condition != nil {
 			c.patchJumpIfFalse(exitJump)
 		}
@@ -367,7 +380,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 		// 	c.compileStatement(s.Iteration)
 		// }
 		// offset := loopStart - len(c.chunk.Code) - 1
-		// c.chunk.Emit(OP_JUMP, offset, 0, 0)
+		// c.emit(OP_JUMP, offset, 0, 0)
 		// if s.Condition != nil {
 		// 	c.patchJumpIfFalse(exitJump)
 		// }
@@ -430,24 +443,24 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 				current := &c.scopes[len(c.scopes)-1]
 				current.locals[s.Name] = slot
 			}
-			c.chunk.Emit(OP_CLOSURE, slot, idx, 0)
+			c.emit(OP_CLOSURE, slot, idx, 0)
 		} else {
 			// Global function
 			slot := c.getGlobalSlot(s.Name)
 			tempReg := c.newRegister()
-			c.chunk.Emit(OP_CLOSURE, tempReg, idx, 0)
-			c.chunk.Emit(OP_DEFINE_GLOBAL, tempReg, slot, 0)
+			c.emit(OP_CLOSURE, tempReg, idx, 0)
+			c.emit(OP_DEFINE_GLOBAL, tempReg, slot, 0)
 			c.freeRegister(tempReg)
 		}
 
 	case frontend.ReturnStatement:
 		if s.Value != nil {
 			resultReg := c.compileExpression(s.Value)
-			c.chunk.Emit(OP_RETURN, resultReg, 0, 0)
+			c.emit(OP_RETURN, resultReg, 0, 0)
 		} else {
 			nullReg := c.newRegister()
-			c.chunk.Emit(OP_LOAD_CONST, nullReg, c.chunk.AddConstant(value.MakeNull()), 0)
-			c.chunk.Emit(OP_RETURN, nullReg, 0, 0)
+			c.emit(OP_LOAD_CONST, nullReg, c.chunk.AddConstant(value.MakeNull()), 0)
+			c.emit(OP_RETURN, nullReg, 0, 0)
 		}
 	case frontend.TryCatchStatement:
 		// Allocate a register for the error (will be used in catch blocks)
@@ -455,7 +468,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 
 		// Jump table: tryBeginIndex will store the catch start address
 		tryBeginIndex := len(c.chunk.Code)
-		c.chunk.Emit(OP_TRY_BEGIN, -1, errorReg, -1) // C=-1 for now, will patch with finally address
+		c.emit(OP_TRY_BEGIN, -1, errorReg, -1) // C=-1 for now, will patch with finally address
 
 		// Compile try block
 		c.enterScope()
@@ -465,7 +478,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 		c.exitScope()
 
 		// Emit TRY_END to pop handler on successful completion
-		c.chunk.Emit(OP_TRY_END, 0, 0, 0)
+		c.emit(OP_TRY_END, 0, 0, 0)
 
 		// End of try block, jump over all catch blocks
 		tryEndJump := c.emitJump()
@@ -513,7 +526,7 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 
 			// Emit TRY_END to pop handler after finally block completes
 			// This handles pending signals that were set before jumping to finally
-			c.chunk.Emit(OP_TRY_END, 0, 0, 0)
+			c.emit(OP_TRY_END, 0, 0, 0)
 		}
 	case frontend.BreakStatement:
 		c.emitBreakJump()
@@ -526,13 +539,24 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 }
 
 func (c *Compiler) compileExpression(expr frontend.Expression) int {
+	prevLine, prevCol := c.currentLine, c.currentCol
+	line, col := expressionLocation(expr)
+	if line > 0 {
+		c.currentLine = line
+		c.currentCol = col
+	}
+	defer func() {
+		c.currentLine = prevLine
+		c.currentCol = prevCol
+	}()
+
 	// Constant folding (compile-time evaluation)
 	if c.optimizer != nil && c.optimizer.Enabled("constant_folding") {
 		if constVal, ok := c.optimizer.tryFoldConstant(expr); ok {
 			c.optimizer.NoteConstantFolded()
 			reg := c.newRegister()
 			constIndex := c.chunk.AddConstant(constVal)
-			c.chunk.Emit(OP_LOAD_CONST, reg, constIndex, 0)
+			c.emit(OP_LOAD_CONST, reg, constIndex, 0)
 			return reg
 		}
 	}
@@ -541,37 +565,37 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 	case frontend.NumericLiteral:
 		reg := c.newRegister()
 		constIndex := c.chunk.AddConstant(value.MakeNumber(e.Value))
-		c.chunk.Emit(OP_LOAD_CONST, reg, constIndex, 0)
+		c.emit(OP_LOAD_CONST, reg, constIndex, 0)
 		return reg
 
 	case frontend.FloatLiteral:
 		reg := c.newRegister()
 		constIndex := c.chunk.AddConstant(value.MakeNumber(e.Value))
-		c.chunk.Emit(OP_LOAD_CONST, reg, constIndex, 0)
+		c.emit(OP_LOAD_CONST, reg, constIndex, 0)
 		return reg
 	case frontend.BooleanLiteral:
 		reg := c.newRegister()
 		constIndex := c.chunk.AddConstant(value.MakeBool(e.Value))
-		c.chunk.Emit(OP_LOAD_CONST, reg, constIndex, 0)
+		c.emit(OP_LOAD_CONST, reg, constIndex, 0)
 		return reg
 
 	case frontend.StringLiteral:
 		reg := c.newRegister()
 		constIndex := c.chunk.AddConstant(value.MakeString(e.Value))
-		c.chunk.Emit(OP_LOAD_CONST, reg, constIndex, 0)
+		c.emit(OP_LOAD_CONST, reg, constIndex, 0)
 		return reg
 
 	case frontend.Identifier:
 		reg := c.newRegister()
 		if slot, ok := c.lookupLocal(e.Symbol); ok {
 			// Local variable - search scope stack
-			c.chunk.Emit(OP_MOVE, reg, slot, 0)
+			c.emit(OP_MOVE, reg, slot, 0)
 		} else if up, ok := c.resolveUpvalue(e.Symbol); ok {
-			c.chunk.Emit(OP_GET_UPVALUE, reg, up, 0)
+			c.emit(OP_GET_UPVALUE, reg, up, 0)
 		} else {
 			// Global variable
 			slot := c.getGlobalSlot(e.Symbol)
-			c.chunk.Emit(OP_GET_GLOBAL, reg, slot, 0)
+			c.emit(OP_GET_GLOBAL, reg, slot, 0)
 		}
 		return reg
 
@@ -584,11 +608,11 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 			jumpIfFalse := c.emitJumpIfFalse(left)
 			// Left is true, evaluate right
 			right := c.compileExpression(e.Right)
-			c.chunk.Emit(OP_MOVE, result, right, 0)
+			c.emit(OP_MOVE, result, right, 0)
 			jumpOver := c.emitJump()
 			// Left was false, return left (false)
 			c.patchJumpIfFalse(jumpIfFalse)
-			c.chunk.Emit(OP_MOVE, result, left, 0)
+			c.emit(OP_MOVE, result, left, 0)
 			c.patchJump(jumpOver)
 			c.freeRegister(right)
 			c.freeRegister(left)
@@ -602,11 +626,11 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 			jumpIfTrue := c.emitJumpIfTrue(left)
 			// Left is false, evaluate right
 			right := c.compileExpression(e.Right)
-			c.chunk.Emit(OP_MOVE, result, right, 0)
+			c.emit(OP_MOVE, result, right, 0)
 			jumpOver := c.emitJump()
 			// Left was true, return left (true)
 			c.patchJumpIfTrue(jumpIfTrue)
-			c.chunk.Emit(OP_MOVE, result, left, 0)
+			c.emit(OP_MOVE, result, left, 0)
 			c.patchJump(jumpOver)
 			c.freeRegister(right)
 			c.freeRegister(left)
@@ -620,27 +644,27 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 
 		switch e.Operator {
 		case "+":
-			c.chunk.Emit(c.selectAddOp(e.Left, e.Right), result, left, right)
+			c.emit(c.selectAddOp(e.Left, e.Right), result, left, right)
 		case "-":
-			c.chunk.Emit(OP_SUB, result, left, right)
+			c.emit(OP_SUB, result, left, right)
 		case "*":
-			c.chunk.Emit(OP_MUL, result, left, right)
+			c.emit(OP_MUL, result, left, right)
 		case "/":
-			c.chunk.Emit(OP_DIV, result, left, right)
+			c.emit(OP_DIV, result, left, right)
 		case "%":
-			c.chunk.Emit(OP_MOD, result, left, right)
+			c.emit(OP_MOD, result, left, right)
 		case ">":
-			c.chunk.Emit(OP_GREATER, result, left, right)
+			c.emit(OP_GREATER, result, left, right)
 		case "<":
-			c.chunk.Emit(OP_LESS, result, left, right)
+			c.emit(OP_LESS, result, left, right)
 		case "==":
-			c.chunk.Emit(OP_EQUAL, result, left, right)
+			c.emit(OP_EQUAL, result, left, right)
 		case "!=":
-			c.chunk.Emit(OP_NOT_EQUAL, result, left, right)
+			c.emit(OP_NOT_EQUAL, result, left, right)
 		case ">=":
-			c.chunk.Emit(OP_GREATER_EQUAL, result, left, right)
+			c.emit(OP_GREATER_EQUAL, result, left, right)
 		case "<=":
-			c.chunk.Emit(OP_LESS_EQUAL, result, left, right)
+			c.emit(OP_LESS_EQUAL, result, left, right)
 		default:
 			panic("unsupported binary operator: " + e.Operator)
 		}
@@ -652,7 +676,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 		result := c.newRegister()
 		switch e.Operator {
 		case "!":
-			c.chunk.Emit(OP_NOT, result, operand, 0)
+			c.emit(OP_NOT, result, operand, 0)
 		}
 		c.freeRegister(operand)
 		return result
@@ -661,7 +685,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 		count := len(e.Elements)
 		if count == 0 {
 			reg := c.newRegister()
-			c.chunk.Emit(OP_BUILD_ARRAY, reg, 0, 0)
+			c.emit(OP_BUILD_ARRAY, reg, 0, 0)
 			return reg
 		}
 
@@ -674,12 +698,12 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 		// Compile expressions into allocated registers
 		for i, elem := range e.Elements {
 			tempReg := c.compileExpression(elem)
-			c.chunk.Emit(OP_MOVE, elementRegs[i], tempReg, 0)
+			c.emit(OP_MOVE, elementRegs[i], tempReg, 0)
 			c.freeRegister(tempReg)
 		}
 
 		reg := c.newRegister()
-		c.chunk.Emit(OP_BUILD_ARRAY, reg, count, elementRegs[0])
+		c.emit(OP_BUILD_ARRAY, reg, count, elementRegs[0])
 
 		// Free element registers
 		for i := len(elementRegs) - 1; i >= 0; i-- {
@@ -691,7 +715,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 		count := len(e.Properties)
 		if count == 0 {
 			reg := c.newRegister()
-			c.chunk.Emit(OP_BUILD_MAP, reg, 0, 0)
+			c.emit(OP_BUILD_MAP, reg, 0, 0)
 			return reg
 		}
 
@@ -708,14 +732,14 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 			keyReg := pairRegs[i*2]
 			valReg := pairRegs[i*2+1]
 
-			c.chunk.Emit(OP_LOAD_CONST, keyReg, keyIdx, 0)
+			c.emit(OP_LOAD_CONST, keyReg, keyIdx, 0)
 			tempValReg := c.compileExpression(prop.Value)
-			c.chunk.Emit(OP_MOVE, valReg, tempValReg, 0)
+			c.emit(OP_MOVE, valReg, tempValReg, 0)
 			c.freeRegister(tempValReg)
 		}
 
 		reg := c.newRegister()
-		c.chunk.Emit(OP_BUILD_MAP, reg, count, pairRegs[0])
+		c.emit(OP_BUILD_MAP, reg, count, pairRegs[0])
 
 		// Free pair registers
 		for i := len(pairRegs) - 1; i >= 0; i-- {
@@ -728,7 +752,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 			objReg := c.compileExpression(e.Object)
 			propReg := c.compileExpression(e.Property)
 			result := c.newRegister()
-			c.chunk.Emit(OP_GET_INDEX, result, objReg, propReg)
+			c.emit(OP_GET_INDEX, result, objReg, propReg)
 			c.freeRegister(propReg)
 			c.freeRegister(objReg)
 			return result
@@ -737,7 +761,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 			if ident, ok := e.Property.(frontend.Identifier); ok {
 				keyIdx := c.chunk.AddConstant(value.MakeString(ident.Symbol))
 				result := c.newRegister()
-				c.chunk.Emit(OP_GET_PROPERTY, result, objReg, keyIdx)
+				c.emit(OP_GET_PROPERTY, result, objReg, keyIdx)
 				c.freeRegister(objReg)
 				return result
 			} else {
@@ -773,7 +797,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 
 			for i, arg := range e.Arguments {
 				tempReg := c.compileExpression(arg)
-				c.chunk.Emit(OP_MOVE, argStart+i, tempReg, 0)
+				c.emit(OP_MOVE, argStart+i, tempReg, 0)
 				c.freeRegister(tempReg)
 			}
 
@@ -784,7 +808,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 			// Encode argStart and argCount into D operand
 			argStartAndCount := (argStart << 16) | argCount
 
-			c.chunk.Emit(OP_CALL_METHOD, dest, objReg, methodNameIdx, argStartAndCount)
+			c.emit(OP_CALL_METHOD, dest, objReg, methodNameIdx, argStartAndCount)
 
 			// Free registers
 			for i := argCount - 1; i >= 0; i-- {
@@ -811,12 +835,12 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 		// Compile arguments into allocated registers
 		for i, arg := range e.Arguments {
 			tempReg := c.compileExpression(arg)
-			c.chunk.Emit(OP_MOVE, argStart+i, tempReg, 0)
+			c.emit(OP_MOVE, argStart+i, tempReg, 0)
 			c.freeRegister(tempReg)
 		}
 
 		dest := c.newRegister()
-		c.chunk.Emit(OP_CALL, dest, funcReg, argStart, argCount)
+		c.emit(OP_CALL, dest, funcReg, argStart, argCount)
 
 		// Free argument registers
 		for i := argCount - 1; i >= 0; i-- {
@@ -874,7 +898,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 
 		reg := c.newRegister()
 		idx := c.chunk.AddConstant(MakeFunction(fnValue))
-		c.chunk.Emit(OP_CLOSURE, reg, idx, 0)
+		c.emit(OP_CLOSURE, reg, idx, 0)
 
 		return reg
 
@@ -888,14 +912,14 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 						if ident, ok := bin.Left.(frontend.Identifier); ok && ident.Symbol == target.Symbol {
 							rhsReg := c.compileExpression(bin.Right)
 							resultReg := c.newRegister()
-							c.chunk.Emit(OP_ADD_LOCAL, slot, rhsReg, resultReg)
+							c.emit(OP_ADD_LOCAL, slot, rhsReg, resultReg)
 							c.freeRegister(rhsReg)
 							return resultReg
 						}
 						if ident, ok := bin.Right.(frontend.Identifier); ok && ident.Symbol == target.Symbol {
 							lhsReg := c.compileExpression(bin.Left)
 							resultReg := c.newRegister()
-							c.chunk.Emit(OP_ADD_LOCAL, slot, lhsReg, resultReg)
+							c.emit(OP_ADD_LOCAL, slot, lhsReg, resultReg)
 							c.freeRegister(lhsReg)
 							return resultReg
 						}
@@ -905,7 +929,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 				valueReg := c.compileExpression(e.Value)
 				if slot, ok := c.lookupLocal(target.Symbol); ok {
 					// Local assignment - search scope stack
-					c.chunk.Emit(OP_MOVE, slot, valueReg, 0)
+					c.emit(OP_MOVE, slot, valueReg, 0)
 					if inferred := c.inferExprType(e.Value); inferred != "" {
 						for i := len(c.scopes) - 1; i >= 0; i-- {
 							if _, exists := c.scopes[i].locals[target.Symbol]; exists {
@@ -915,11 +939,11 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 						}
 					}
 				} else if up, ok := c.resolveUpvalue(target.Symbol); ok {
-					c.chunk.Emit(OP_SET_UPVALUE, valueReg, up, 0)
+					c.emit(OP_SET_UPVALUE, valueReg, up, 0)
 				} else {
 					// Global assignment - A=valueReg, B=slot
 					slot := c.getGlobalSlot(target.Symbol)
-					c.chunk.Emit(OP_SET_GLOBAL, valueReg, slot, 0)
+					c.emit(OP_SET_GLOBAL, valueReg, slot, 0)
 					if inferred := c.inferExprType(e.Value); inferred != "" {
 						c.globalTypesMap()[target.Symbol] = inferred
 					}
@@ -932,14 +956,14 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 				if target.Computed {
 					propReg := c.compileExpression(target.Property)
 					// OP_SET_INDEX: A=valueReg, B=objReg, C=propReg
-					c.chunk.Emit(OP_SET_INDEX, valueReg, objReg, propReg)
+					c.emit(OP_SET_INDEX, valueReg, objReg, propReg)
 					c.freeRegister(propReg)
 					c.freeRegister(objReg)
 				} else {
 					if ident, ok := target.Property.(frontend.Identifier); ok {
 						keyIdx := c.chunk.AddConstant(value.MakeString(ident.Symbol))
 						// OP_SET_PROPERTY: A=valueReg, B=objReg, C=keyIdx
-						c.chunk.Emit(OP_SET_PROPERTY, valueReg, objReg, keyIdx)
+						c.emit(OP_SET_PROPERTY, valueReg, objReg, keyIdx)
 						c.freeRegister(objReg)
 					}
 				}
@@ -952,31 +976,31 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 				if slot, ok := c.lookupLocal(target.Symbol); ok {
 					switch e.Operator {
 					case "+=":
-						c.chunk.Emit(OP_ADD_LOCAL, slot, valueReg, valueReg)
+						c.emit(OP_ADD_LOCAL, slot, valueReg, valueReg)
 					case "-=":
-						c.chunk.Emit(OP_SUB_LOCAL, slot, valueReg, valueReg)
+						c.emit(OP_SUB_LOCAL, slot, valueReg, valueReg)
 					case "*=":
-						c.chunk.Emit(OP_MUL_LOCAL, slot, valueReg, valueReg)
+						c.emit(OP_MUL_LOCAL, slot, valueReg, valueReg)
 					case "/=":
-						c.chunk.Emit(OP_DIV, valueReg, slot, valueReg)
+						c.emit(OP_DIV, valueReg, slot, valueReg)
 					}
 					// Store result back to local
-					c.chunk.Emit(OP_MOVE, slot, valueReg, 0)
+					c.emit(OP_MOVE, slot, valueReg, 0)
 				} else {
 					slot := c.getGlobalSlot(target.Symbol)
 					temp := c.newRegister()
-					c.chunk.Emit(OP_GET_GLOBAL, temp, slot, 0)
+					c.emit(OP_GET_GLOBAL, temp, slot, 0)
 					switch e.Operator {
 					case "+=":
-						c.chunk.Emit(OP_ADD, valueReg, temp, valueReg)
+						c.emit(OP_ADD, valueReg, temp, valueReg)
 					case "-=":
-						c.chunk.Emit(OP_SUB, valueReg, temp, valueReg)
+						c.emit(OP_SUB, valueReg, temp, valueReg)
 					case "*=":
-						c.chunk.Emit(OP_MUL, valueReg, temp, valueReg)
+						c.emit(OP_MUL, valueReg, temp, valueReg)
 					case "/=":
-						c.chunk.Emit(OP_DIV, valueReg, temp, valueReg)
+						c.emit(OP_DIV, valueReg, temp, valueReg)
 					}
-					c.chunk.Emit(OP_SET_GLOBAL, valueReg, slot, 0)
+					c.emit(OP_SET_GLOBAL, valueReg, slot, 0)
 					c.freeRegister(temp)
 				}
 				return valueReg
@@ -986,20 +1010,20 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 					propReg := c.compileExpression(target.Property)
 					// Get current value
 					temp := c.newRegister()
-					c.chunk.Emit(OP_GET_INDEX, temp, objReg, propReg)
+					c.emit(OP_GET_INDEX, temp, objReg, propReg)
 					// Perform operation
 					switch e.Operator {
 					case "+=":
-						c.chunk.Emit(OP_ADD, valueReg, temp, valueReg)
+						c.emit(OP_ADD, valueReg, temp, valueReg)
 					case "-=":
-						c.chunk.Emit(OP_SUB, valueReg, temp, valueReg)
+						c.emit(OP_SUB, valueReg, temp, valueReg)
 					case "*=":
-						c.chunk.Emit(OP_MUL, valueReg, temp, valueReg)
+						c.emit(OP_MUL, valueReg, temp, valueReg)
 					case "/=":
-						c.chunk.Emit(OP_DIV, valueReg, temp, valueReg)
+						c.emit(OP_DIV, valueReg, temp, valueReg)
 					}
 					// Set the result
-					c.chunk.Emit(OP_SET_INDEX, valueReg, objReg, propReg)
+					c.emit(OP_SET_INDEX, valueReg, objReg, propReg)
 					c.freeRegister(temp)
 					c.freeRegister(propReg)
 					c.freeRegister(objReg)
@@ -1008,20 +1032,20 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 						keyIdx := c.chunk.AddConstant(value.MakeString(ident.Symbol))
 						// Get current value
 						temp := c.newRegister()
-						c.chunk.Emit(OP_GET_PROPERTY, temp, objReg, keyIdx)
+						c.emit(OP_GET_PROPERTY, temp, objReg, keyIdx)
 						// Perform operation
 						switch e.Operator {
 						case "+=":
-							c.chunk.Emit(OP_ADD, valueReg, temp, valueReg)
+							c.emit(OP_ADD, valueReg, temp, valueReg)
 						case "-=":
-							c.chunk.Emit(OP_SUB, valueReg, temp, valueReg)
+							c.emit(OP_SUB, valueReg, temp, valueReg)
 						case "*=":
-							c.chunk.Emit(OP_MUL, valueReg, temp, valueReg)
+							c.emit(OP_MUL, valueReg, temp, valueReg)
 						case "/=":
-							c.chunk.Emit(OP_DIV, valueReg, temp, valueReg)
+							c.emit(OP_DIV, valueReg, temp, valueReg)
 						}
 						// Set the result
-						c.chunk.Emit(OP_SET_PROPERTY, valueReg, objReg, keyIdx)
+						c.emit(OP_SET_PROPERTY, valueReg, objReg, keyIdx)
 						c.freeRegister(temp)
 						c.freeRegister(objReg)
 					}
@@ -1036,7 +1060,7 @@ func (c *Compiler) compileExpression(expr frontend.Expression) int {
 }
 
 func (c *Compiler) emitJumpIfFalse(condReg int) int {
-	c.chunk.Emit(OP_JUMP_IF_FALSE, condReg, -1, 0)
+	c.emit(OP_JUMP_IF_FALSE, condReg, -1, 0)
 	return len(c.chunk.Code) - 1
 }
 
@@ -1046,7 +1070,7 @@ func (c *Compiler) patchJumpIfFalse(index int) {
 }
 
 func (c *Compiler) emitJumpIfTrue(condReg int) int {
-	c.chunk.Emit(OP_JUMP_IF_TRUE, condReg, -1, 0)
+	c.emit(OP_JUMP_IF_TRUE, condReg, -1, 0)
 	return len(c.chunk.Code) - 1
 }
 
@@ -1056,13 +1080,143 @@ func (c *Compiler) patchJumpIfTrue(index int) {
 }
 
 func (c *Compiler) emitJump() int {
-	c.chunk.Emit(OP_JUMP, -1, 0, 0)
+	c.emit(OP_JUMP, -1, 0, 0)
 	return len(c.chunk.Code) - 1
 }
 
 func (c *Compiler) patchJump(index int) {
 	offset := len(c.chunk.Code) - index - 1
 	c.chunk.Code[index].A = offset
+}
+
+func (c *Compiler) emit(op OpCode, a, b, c2 int, extra ...int) {
+	c.chunk.EmitAt(op, a, b, c2, c.currentLine, c.currentCol, extra...)
+}
+
+func statementLocation(stmt frontend.Statement) (int, int) {
+	switch s := stmt.(type) {
+	case frontend.VariableDeclaration:
+		if s.Line > 0 {
+			return s.Line, s.Column
+		}
+		if s.Value != nil {
+			return expressionLocation(s.Value)
+		}
+		return 0, 0
+	case frontend.IfStatement:
+		if s.Line > 0 {
+			return s.Line, s.Column
+		}
+		return expressionLocation(s.Condition)
+	case frontend.WhileStatement:
+		if s.Line > 0 {
+			return s.Line, s.Column
+		}
+		return expressionLocation(s.Condition)
+	case frontend.ForStatement:
+		if s.Line > 0 {
+			return s.Line, s.Column
+		}
+		if s.Initial != nil {
+			return statementLocation(s.Initial)
+		}
+		if s.Condition != nil {
+			return expressionLocation(s.Condition)
+		}
+		if s.Iteration != nil {
+			return expressionLocation(s.Iteration)
+		}
+		return 0, 0
+	case frontend.FunctionDeclaration:
+		return s.Line, s.Column
+	case frontend.ReturnStatement:
+		if s.Line > 0 {
+			return s.Line, s.Column
+		}
+		if s.Value != nil {
+			return expressionLocation(s.Value)
+		}
+		return 0, 0
+	case frontend.TryCatchStatement:
+		return s.Line, s.Column
+	case frontend.BreakStatement:
+		return s.Line, s.Column
+	case frontend.ContinueStatement:
+		return s.Line, s.Column
+	case frontend.ImportStatement:
+		return s.Line, s.Column
+	case frontend.ExportStatement:
+		return s.Line, s.Column
+	case frontend.Expression:
+		return expressionLocation(s)
+	default:
+		return 0, 0
+	}
+}
+
+func expressionLocation(expr frontend.Expression) (int, int) {
+	switch e := expr.(type) {
+	case frontend.NumericLiteral:
+		return e.Line, e.Column
+	case frontend.FloatLiteral:
+		return e.Line, e.Column
+	case frontend.BooleanLiteral:
+		return e.Line, e.Column
+	case frontend.StringLiteral:
+		return e.Line, e.Column
+	case frontend.Identifier:
+		return e.Line, e.Column
+	case frontend.UnaryExpression:
+		if e.Line > 0 {
+			return e.Line, e.Column
+		}
+		return expressionLocation(e.Operand)
+	case frontend.BinaryExpression:
+		if e.Line > 0 {
+			return e.Line, e.Column
+		}
+		if line, col := expressionLocation(e.Left); line > 0 {
+			return line, col
+		}
+		return expressionLocation(e.Right)
+	case frontend.AssignmentExpression:
+		if e.Line > 0 {
+			return e.Line, e.Column
+		}
+		if line, col := expressionLocation(e.Assignee); line > 0 {
+			return line, col
+		}
+		return expressionLocation(e.Value)
+	case frontend.ArrayLiteral:
+		return e.Line, e.Column
+	case frontend.MapLiteral:
+		return e.Line, e.Column
+	case frontend.MemberExpression:
+		if e.Line > 0 {
+			return e.Line, e.Column
+		}
+		if line, col := expressionLocation(e.Object); line > 0 {
+			return line, col
+		}
+		return expressionLocation(e.Property)
+	case frontend.CallExpression:
+		if e.Line > 0 {
+			return e.Line, e.Column
+		}
+		if line, col := expressionLocation(e.Callee); line > 0 {
+			return line, col
+		}
+		if len(e.Arguments) > 0 {
+			return expressionLocation(e.Arguments[0])
+		}
+		return 0, 0
+	case frontend.FunctionExpression:
+		return e.Line, e.Column
+	case frontend.AwaitExpression:
+		return e.Line, e.Column
+	default:
+		return 0, 0
+	}
 }
 
 func getParameterTypes(params []frontend.Parameter) []string {

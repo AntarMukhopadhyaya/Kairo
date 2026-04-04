@@ -1,0 +1,33 @@
+name: Benchmark Nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Run benchmark suite
+        run: |
+          go test ./benchmark -run '^$' -bench '.' -benchmem -count=3 | tee benchmark-nightly.txt
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-nightly-${{ github.run_id }}
+          path: benchmark-nightly.txt

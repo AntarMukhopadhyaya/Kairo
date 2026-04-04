@@ -8,6 +8,9 @@ type Instruction struct {
 	B  int
 	C  int
 	D  int
+	// Source location for diagnostics.
+	Line   int
+	Column int
 }
 type Chunk struct {
 	Code      []Instruction
@@ -27,15 +30,21 @@ func (c *Chunk) AddConstant(val value.Value) int {
 }
 
 func (c *Chunk) Emit(op OpCode, a, b, c2 int, extra ...int) {
+	c.EmitAt(op, a, b, c2, 0, 0, extra...)
+}
+
+func (c *Chunk) EmitAt(op OpCode, a, b, c2 int, line int, column int, extra ...int) {
 	d := 0
 	if len(extra) > 0 {
 		d = extra[0]
 	}
 	c.Code = append(c.Code, Instruction{
-		Op: op,
-		A:  a,
-		B:  b,
-		C:  c2,
-		D:  d,
+		Op:     op,
+		A:      a,
+		B:      b,
+		C:      c2,
+		D:      d,
+		Line:   line,
+		Column: column,
 	})
 }

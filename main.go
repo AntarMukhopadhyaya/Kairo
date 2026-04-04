@@ -3,6 +3,7 @@ package main
 import (
 	"Kairo/compiler"
 	"Kairo/frontend"
+	"Kairo/value"
 	"Kairo/vm"
 
 	"bufio"
@@ -87,9 +88,10 @@ func executeSourceCodeWithEnv(src string, globals []vm.VariableInfo, slots map[s
 	}
 
 	machine := vm.NewVM(globals)
+	machine.SetSourceName("<repl>")
 	machine.EnableInstructionProfiling(profile)
 	result := machine.Run(mainClosure)
-	fmt.Println(yellow, "Result:", result.ToString(), reset)
+	printVMResult(result)
 	if profile {
 		p := machine.InstructionProfiler()
 		if p != nil {
@@ -141,9 +143,10 @@ func executeFile(filename string, optimize bool, profile bool) {
 	mainClosure := &vm.ClosureObject{Function: mainFn, Upvalues: nil}
 
 	machine := vm.NewVM(globals)
+	machine.SetSourceName(filepath.Base(filename))
 	machine.EnableInstructionProfiling(profile)
 	result := machine.Run(mainClosure)
-	fmt.Println(yellow, "Result:", result.ToString(), reset)
+	printVMResult(result)
 
 	if profile {
 		p := machine.InstructionProfiler()
@@ -283,9 +286,10 @@ func executeBytecode(filename string, profile bool) {
 	// Execute
 	fmt.Println(blue + "Executing bytecode..." + reset)
 	machine := vm.NewVM(globals)
+	machine.SetSourceName(filepath.Base(filename))
 	machine.EnableInstructionProfiling(profile)
 	result := machine.Run(mainClosure)
-	fmt.Println(yellow, "Result:", result.ToString(), reset)
+	printVMResult(result)
 
 	if profile {
 		p := machine.InstructionProfiler()
@@ -303,6 +307,27 @@ func executeBytecode(filename string, profile bool) {
 			}
 		}
 	}
+}
+
+func printVMResult(result value.Value) {
+	if result.Kind != value.ErrorKind {
+		fmt.Println(yellow, "Result:", result.ToString(), reset)
+		return
+	}
+
+	err := result.AsError()
+	if len(err.StackTrace) > 0 {
+		fmt.Println("Traceback (most recent call last):")
+		for _, frame := range err.StackTrace {
+			fmt.Printf("  %s\n", frame)
+		}
+	}
+
+	label := err.ErrorType
+	if label == "" {
+		label = "Error"
+	}
+	fmt.Printf("%s: %s\n", label, err.Message)
 }
 
 // Main function to decide between REPL and file execution

@@ -30,7 +30,7 @@ const (
 
 	// Version
 	VersionMajor = 1
-	VersionMinor = 0
+	VersionMinor = 1
 
 	// Constant type tags
 	ConstNull         byte = 0
@@ -230,7 +230,7 @@ func (bw *BytecodeWriter) writeCode(code []Instruction) error {
 		return err
 	}
 
-	// Write each instruction (16 bytes each: 4 bytes per field)
+	// Write each instruction: 1-byte opcode + 3-byte padding + 6x int32 fields.
 	for _, instr := range code {
 		if err := bw.writeByte(byte(instr.Op)); err != nil {
 			return err
@@ -256,6 +256,12 @@ func (bw *BytecodeWriter) writeCode(code []Instruction) error {
 			return err
 		}
 		if err := bw.writeInt32(int32(instr.D)); err != nil {
+			return err
+		}
+		if err := bw.writeInt32(int32(instr.Line)); err != nil {
+			return err
+		}
+		if err := bw.writeInt32(int32(instr.Column)); err != nil {
 			return err
 		}
 	}
@@ -298,7 +304,8 @@ func boolToByte(b bool) byte {
 
 // BytecodeReader reads compiled bytecode from binary format
 type BytecodeReader struct {
-	reader io.Reader
+	reader       io.Reader
+	versionMinor byte
 }
 
 func NewBytecodeReader(r io.Reader) *BytecodeReader {
@@ -330,6 +337,7 @@ func (br *BytecodeReader) ReadChunk() (*Chunk, int, map[string]int, error) {
 		return nil, 0, nil, fmt.Errorf("incompatible bytecode version: %d.%d (expected %d.x)",
 			major, minor, VersionMajor)
 	}
+	br.versionMinor = minor
 
 	// First, read global slots so we can use them for stdlib lookup
 	// Read constants count to advance past constants
@@ -614,13 +622,27 @@ func (br *BytecodeReader) readCode() ([]Instruction, error) {
 		if err != nil {
 			return nil, err
 		}
+		line := int32(0)
+		column := int32(0)
+		if br.versionMinor >= 1 {
+			line, err = br.readInt32()
+			if err != nil {
+				return nil, err
+			}
+			column, err = br.readInt32()
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		instructions[i] = Instruction{
-			Op: OpCode(op),
-			A:  int(a),
-			B:  int(b),
-			C:  int(c),
-			D:  int(d),
+			Op:     OpCode(op),
+			A:      int(a),
+			B:      int(b),
+			C:      int(c),
+			D:      int(d),
+			Line:   int(line),
+			Column: int(column),
 		}
 	}
 

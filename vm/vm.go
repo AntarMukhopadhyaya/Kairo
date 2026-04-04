@@ -13,6 +13,7 @@ type VM struct {
 	Globals        []VariableInfo
 	handlers       []ExceptionHandler
 	modules        map[string]value.Value
+	sourceName     string
 	regFreeList    [][]value.Value
 	methodRegistry map[value.ValueKind]map[string]*value.InternalFunctionObject
 	profiler       *InstructionProfiler
@@ -118,10 +119,19 @@ func NewVM(globals []VariableInfo) *VM {
 		frames:         []CallFrame{},
 		Globals:        globals,
 		modules:        make(map[string]value.Value),
+		sourceName:     "<unknown>",
 		regFreeList:    [][]value.Value{},
 		methodRegistry: initMethodRegistry(),
 	}
 	return vm
+}
+
+func (vm *VM) SetSourceName(name string) {
+	if name == "" {
+		vm.sourceName = "<unknown>"
+		return
+	}
+	vm.sourceName = name
 }
 
 func (vm *VM) EnableInstructionProfiling(enabled bool) {
@@ -163,9 +173,62 @@ func (vm *VM) ensureGlobalsSize(size int) {
 	vm.Globals = newGlobals
 }
 
+func withInstrLocation(errVal value.Value, instr Instruction) value.Value {
+	if errVal.Kind != value.ErrorKind {
+		return errVal
+	}
+	errObj := errVal.AsError()
+	if errObj.Line > 0 || errObj.Column > 0 {
+		return errVal
+	}
+	return value.MakeError(errObj.Message, errObj.ErrorType, instr.Line, instr.Column)
+}
+
+func runtimeErrorAt(instr Instruction, message, errorType string) value.Value {
+	return value.MakeError(message, errorType, instr.Line, instr.Column)
+}
+
+func (vm *VM) buildStackTrace() []string {
+	trace := []string{}
+	for i := len(vm.frames) - 1; i >= 0; i-- {
+		frame := vm.frames[i]
+		fn := frame.closure.Function
+		name := fn.Name
+		if name == "" {
+			name = "<anonymous>"
+		}
+		ip := frame.ip
+		// Try to get instruction for line info
+		var line, col int
+		if ip > 0 && ip-1 < len(fn.Chunk.Code) {
+			instr := fn.Chunk.Code[ip-1]
+			line = instr.Line
+			col = instr.Column
+		}
+
+		trace = append(trace,
+			fmt.Sprintf("at %s (%s:%d:%d)", name, vm.sourceName, line, col),
+		)
+	}
+	return trace
+}
+
 // handleError checks if there's an exception handler for the current frame
 // and jumps to the catch block if one exists. Returns true if error was handled.
 func (vm *VM) handleError(errorVal value.Value) bool {
+	if len(vm.frames) == 0 {
+		return false
+	}
+
+	if errorVal.Kind != value.ErrorKind {
+		errorVal = value.MakeError(errorVal.ToString(), "RuntimeError", 0, 0)
+	}
+
+	errObj := errorVal.AsError()
+	if errObj.StackTrace == nil {
+		errObj.StackTrace = vm.buildStackTrace()
+	}
+
 	currentFrameIdx := len(vm.frames) - 1
 
 	// Search for a handler in the current frame
@@ -184,17 +247,12 @@ func (vm *VM) handleError(errorVal value.Value) bool {
 			frame.ip = handler.handlerIP
 
 			// Remove this handler (it's been triggered)
-			vm.handlers = vm.handlers[:i]
+			vm.handlers = append(vm.handlers[:i], vm.handlers[i+1:]...)
 
 			return true
 		}
 	}
 
-	// No handler found - panic with error details
-	if errorVal.Kind == value.ErrorKind {
-		errObj := errorVal.AsError()
-		panic(fmt.Sprintf("Unhandled %s: %s", errObj.ErrorType, errObj.Message))
-	}
 	return false
 }
 
@@ -299,9 +357,13 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 
 		case OP_ADD:
 			result := add(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_ADD_INT:
 			a := frame.regs[instr.B]
@@ -310,9 +372,13 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				frame.regs[instr.A] = value.MakeNumber(a.Num + b.Num)
 			} else {
 				result := add(a, b)
+				result = withInstrLocation(result, instr)
 				frame.regs[instr.A] = result
-				if result.Kind == value.ErrorKind && vm.handleError(result) {
-					continue
+				if result.Kind == value.ErrorKind {
+					if vm.handleError(result) {
+						continue
+					}
+					return result
 				}
 			}
 		case OP_ADD_FLOAT:
@@ -322,9 +388,13 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				frame.regs[instr.A] = value.MakeNumber(a.Num + b.Num)
 			} else {
 				result := add(a, b)
+				result = withInstrLocation(result, instr)
 				frame.regs[instr.A] = result
-				if result.Kind == value.ErrorKind && vm.handleError(result) {
-					continue
+				if result.Kind == value.ErrorKind {
+					if vm.handleError(result) {
+						continue
+					}
+					return result
 				}
 			}
 		case OP_ADD_STR:
@@ -334,75 +404,111 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				frame.regs[instr.A] = value.ConcatStrings(a, b)
 			} else {
 				result := add(a, b)
+				result = withInstrLocation(result, instr)
 				frame.regs[instr.A] = result
-				if result.Kind == value.ErrorKind && vm.handleError(result) {
-					continue
+				if result.Kind == value.ErrorKind {
+					if vm.handleError(result) {
+						continue
+					}
+					return result
 				}
 			}
 		case OP_ADD_LOCAL:
 			a := frame.regs[instr.A]
 			b := frame.regs[instr.B]
 			result := add(a, b)
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
 			if instr.C >= 0 && instr.C < len(frame.regs) {
 				frame.regs[instr.C] = result
 			}
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_SUB_LOCAL:
 			a := frame.regs[instr.A]
 			b := frame.regs[instr.B]
 			result := sub(a, b)
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
 			if instr.C >= 0 && instr.C < len(frame.regs) {
 				frame.regs[instr.C] = result
 			}
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_MUL_LOCAL:
 			a := frame.regs[instr.A]
 			b := frame.regs[instr.B]
 			result := mul(a, b)
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
 			if instr.C >= 0 && instr.C < len(frame.regs) {
 				frame.regs[instr.C] = result
 			}
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_SUB:
 			result := sub(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_MUL:
 			result := mul(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_DIV:
 			result := div(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_EQUAL:
 			frame.regs[instr.A] = equal(frame.regs[instr.B], frame.regs[instr.C])
 		case OP_GREATER:
 			result := greater(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_LESS:
 			result := less(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 		case OP_NOT_EQUAL:
 			eqResult := equal(frame.regs[instr.B], frame.regs[instr.C])
@@ -495,18 +601,36 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			case value.InternalFunctionKind:
 				fn := callee.AsInternalFunction()
 				if fn.Arity != -1 && fn.Arity != argCount {
-					panic("wrong number of arguments")
+					errVal := runtimeErrorAt(instr, "wrong number of arguments", "ArgumentError")
+					frame.regs[dest] = errVal
+					if vm.handleError(errVal) {
+						continue
+					}
+					return errVal
 				}
 				var args []value.Value
 				if argCount > 0 {
 					args = frame.regs[argStart : argStart+argCount]
 				}
-				frame.regs[dest] = fn.Call(args)
+				result := fn.Call(args)
+				result = withInstrLocation(result, instr)
+				frame.regs[dest] = result
+				if result.Kind == value.ErrorKind {
+					if vm.handleError(result) {
+						continue
+					}
+					return result
+				}
 
 			case value.ClosureKind:
 				cl := AsClosure(callee)
 				if cl.Function.Arity != argCount {
-					panic("wrong number of arguments")
+					errVal := runtimeErrorAt(instr, "wrong number of arguments", "ArgumentError")
+					frame.regs[dest] = errVal
+					if vm.handleError(errVal) {
+						continue
+					}
+					return errVal
 				}
 				newFrame := CallFrame{
 					closure:   cl,
@@ -522,7 +646,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			case value.FunctionKind:
 				fn := AsFunction(callee)
 				if fn.Arity != argCount {
-					panic("wrong number of arguments")
+					errVal := runtimeErrorAt(instr, "wrong number of arguments", "ArgumentError")
+					frame.regs[dest] = errVal
+					if vm.handleError(errVal) {
+						continue
+					}
+					return errVal
 				}
 				cl := &ClosureObject{Function: fn, Upvalues: nil}
 				newFrame := CallFrame{
@@ -537,7 +666,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				vm.frames = append(vm.frames, newFrame)
 
 			default:
-				panic("not callable")
+				errVal := runtimeErrorAt(instr, "not callable", "TypeError")
+				frame.regs[dest] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 
 		case OP_CLOSURE:
@@ -577,7 +711,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				// key is at C+2*i, value is at C+2*i+1
 				keyVal := frame.regs[instr.C+2*i]
 				if !value.IsStringLike(keyVal) {
-					panic("map key must be a string")
+					errVal := runtimeErrorAt(instr, "map key must be a string", "TypeError")
+					frame.regs[instr.A] = errVal
+					if vm.handleError(errVal) {
+						continue
+					}
+					return errVal
 				}
 				val := frame.regs[instr.C+2*i+1]
 				props[keyVal.ToString()] = val
@@ -588,22 +727,31 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			keyIdx := instr.C
 			keyVal := frame.closure.Function.Chunk.Constants[keyIdx]
 			if keyVal.Kind != value.StringKind {
-				frame.regs[instr.A] = value.MakeError(
+				errVal := value.MakeError(
 					"Attempting to access property with non-string key",
 					"TypeError",
-					0,
-					0,
+					instr.Line,
+					instr.Column,
 				)
-				break
+				frame.regs[instr.A] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 			obj := frame.regs[instr.B]
 			if obj.Kind != value.MapKind {
-				frame.regs[instr.A] = value.MakeError(
+				errVal := value.MakeError(
 					"Attempting to access property of non-map",
 					"TypeError",
-					0,
-					0,
+					instr.Line,
+					instr.Column,
 				)
+				frame.regs[instr.A] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			} else {
 				m := obj.AsMap()
 				key := keyVal.Obj.(string)
@@ -618,7 +766,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			keyIdx := instr.C
 			keyVal := frame.closure.Function.Chunk.Constants[keyIdx]
 			if keyVal.Kind != value.StringKind {
-				break
+				errVal := value.MakeError("Attempting to set property with non-string key", "TypeError", instr.Line, instr.Column)
+				frame.regs[instr.A] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 			obj := frame.regs[instr.B]
 			val := frame.regs[instr.A]
@@ -671,7 +824,6 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 						break
 					}
 					if i < len(arr.Elements) {
-						arr.Elements[i] = val
 						break
 					}
 					// Auto-grow with amortized capacity expansion.
@@ -696,18 +848,29 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				if value.IsStringLike(idx) {
 					obj.AsMap().Properties[idx.ToString()] = val
 				}
-			}
+				}
+
 		case OP_LOAD_MODULE:
 			dest := instr.A
 			nameConst := frame.closure.Function.Chunk.Constants[instr.B]
 			if nameConst.Kind != value.StringKind {
-				panic("module name must be a string")
+				errVal := runtimeErrorAt(instr, "module name must be a string", "TypeError")
+				frame.regs[dest] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 			moduleName := nameConst.Obj.(string)
 
 			module, ok := vm.modules[moduleName]
 			if !ok {
-				panic("Module not found" + moduleName)
+				errVal := runtimeErrorAt(instr, "Module not found: "+moduleName, "ModuleError")
+				frame.regs[dest] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 			frame.regs[dest] = module
 
@@ -782,9 +945,13 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 
 		case OP_MOD:
 			result := mod(frame.regs[instr.B], frame.regs[instr.C])
+			result = withInstrLocation(result, instr)
 			frame.regs[instr.A] = result
-			if result.Kind == value.ErrorKind && vm.handleError(result) {
-				continue
+			if result.Kind == value.ErrorKind {
+				if vm.handleError(result) {
+					continue
+				}
+				return result
 			}
 
 		case OP_CALL_METHOD:
@@ -796,7 +963,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			methodNameVal := frame.closure.Function.Chunk.Constants[instr.C]
 
 			if methodNameVal.Kind != value.StringKind {
-				panic("method name must be a string")
+				errVal := runtimeErrorAt(instr, "method name must be a string", "TypeError")
+				frame.regs[instr.A] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 
 			methodName := methodNameVal.Obj.(string)
@@ -804,12 +976,22 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			// Lookup method by type
 			methodMap, exists := vm.methodRegistry[objVal.Kind]
 			if !exists {
-				panic(fmt.Sprintf("Type %v has no methods", objVal.Kind))
+				errVal := runtimeErrorAt(instr, fmt.Sprintf("Type %v has no methods", objVal.Kind), "TypeError")
+				frame.regs[instr.A] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 
 			method, exists := methodMap[methodName]
 			if !exists {
-				panic(fmt.Sprintf("Method '%s' not found on type %v", methodName, objVal.Kind))
+				errVal := runtimeErrorAt(instr, fmt.Sprintf("Method '%s' not found on type %v", methodName, objVal.Kind), "AttributeError")
+				frame.regs[instr.A] = errVal
+				if vm.handleError(errVal) {
+					continue
+				}
+				return errVal
 			}
 
 			// Decode argStart and argCount from D operand
@@ -825,11 +1007,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 
 			// Call method
 			result := method.Call(fullArgs)
+			result = withInstrLocation(result, instr)
 
 			// Check for error
 			if result.Kind == value.ErrorKind {
 				if !vm.handleError(result) {
-					panic(fmt.Sprintf("Unhandled error in method call: %v", result.ToString()))
+					return result
 				}
 				continue
 			}

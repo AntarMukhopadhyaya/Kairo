@@ -279,7 +279,7 @@ func (f FloatLiteral) GetKind() NodeType {
 type StringLiteral struct {
 	Kind   NodeType
 	Value  string
-	Linet  int
+	Line   int
 	Column int
 }
 

@@ -72,10 +72,11 @@ type InternalFunctionObject struct {
 }
 
 type ErrorObject struct {
-	Message   string
-	ErrorType string
-	Line      int
-	Column    int
+	Message    string
+	ErrorType  string
+	Line       int
+	Column     int
+	StackTrace []string
 }
 type ArrayObject struct {
 	Elements []Value
@@ -110,7 +111,7 @@ func MakeInternalFunction(fn *InternalFunctionObject) Value {
 }
 
 func MakeError(message, errorType string, line, column int) Value {
-	return Value{Kind: ErrorKind, Obj: &ErrorObject{Message: message, ErrorType: errorType, Line: line, Column: column}}
+	return Value{Kind: ErrorKind, Obj: &ErrorObject{Message: message, ErrorType: errorType, Line: line, Column: column, StackTrace: nil}}
 }
 
 func (v Value) IsNull() bool {
@@ -234,10 +235,14 @@ func (v Value) ToString() string {
 		return "<closure>"
 	case ErrorKind:
 		err := v.AsError()
-		if err.ErrorType == "" {
-			return "[Error] " + err.Message
+		loc := ""
+		if err.Line > 0 {
+			loc = " at " + strconv.Itoa(err.Line) + ":" + strconv.Itoa(err.Column)
 		}
-		return "[Error] " + err.ErrorType + ": " + err.Message
+		if err.ErrorType == "" {
+			return "[Error]" + loc + " " + err.Message
+		}
+		return "[Error] " + err.ErrorType + loc + ": " + err.Message
 	default:
 		return "<object>"
 	}

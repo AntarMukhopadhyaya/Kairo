@@ -110,6 +110,10 @@ func NewLexer() *Lexer {
 }
 
 func (l *Lexer) Tokenize(sourceCode string) ([]Token, error) {
+	// Reset position for each fresh tokenization pass.
+	l.lineNumber = 1
+	l.columNumber = 1
+
 	var tokens []Token
 	src := strings.Split(sourceCode, "")
 	for len(src) > 0 {
@@ -295,8 +299,10 @@ func (l *Lexer) Tokenize(sourceCode string) ([]Token, error) {
 			}
 
 		case "\"":
+			startCol := l.columNumber
 			var stringLiteral strings.Builder
 			src = src[1:]
+			l.columNumber++ // opening quote
 			for len(src) > 0 && src[0] != "\"" {
 				stringLiteral.WriteString(src[0])
 				src = src[1:]
@@ -306,9 +312,11 @@ func (l *Lexer) Tokenize(sourceCode string) ([]Token, error) {
 				return nil, errors.New("unterminated string literal")
 			}
 			src = src[1:]
-			tokens = append(tokens, Token{StringLiteralToken, stringLiteral.String(), l.lineNumber, l.columNumber})
+			l.columNumber++ // closing quote
+			tokens = append(tokens, Token{StringLiteralToken, stringLiteral.String(), l.lineNumber, startCol})
 		default:
 			if unicode.IsDigit(rune(src[0][0])) {
+				startCol := l.columNumber
 				var number strings.Builder
 				isFloat := false
 
@@ -330,9 +338,10 @@ func (l *Lexer) Tokenize(sourceCode string) ([]Token, error) {
 					l.columNumber++
 				}
 
-				tokens = append(tokens, Token{Type: Number, Value: number.String(), LineNumber: l.lineNumber, Column: l.columNumber})
+				tokens = append(tokens, Token{Type: Number, Value: number.String(), LineNumber: l.lineNumber, Column: startCol})
 
 			} else if unicode.IsLetter(rune(src[0][0])) {
+				startCol := l.columNumber
 				var identifier strings.Builder
 				for len(src) > 0 && (unicode.IsLetter(rune(src[0][0])) || unicode.IsDigit(rune(src[0][0]))) {
 					identifier.WriteString(src[0])
@@ -345,9 +354,15 @@ func (l *Lexer) Tokenize(sourceCode string) ([]Token, error) {
 
 					tokenType = IdentifierToken
 				}
-				tokens = append(tokens, Token{tokenType, identifier.String(), l.lineNumber, l.columNumber})
+				tokens = append(tokens, Token{tokenType, identifier.String(), l.lineNumber, startCol})
 			} else if src[0] == " " || src[0] == "\t" {
+				ch := src[0]
 				src = src[1:]
+				if ch == "\t" {
+					l.columNumber += 4
+				} else {
+					l.columNumber++
+				}
 			} else {
 				return nil, errors.New("Invalid character: " + src[0])
 			}

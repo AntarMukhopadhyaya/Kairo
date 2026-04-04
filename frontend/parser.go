@@ -68,18 +68,18 @@ func (p *Parser) parseStatement() Statement {
 	case Export:
 		return p.parseExportStatement()
 	case Break:
-		p.consume()
+		tok := p.consume()
 		return BreakStatement{
 			Kind:   BreakStatementNodeType,
-			Line:   p.at().LineNumber,
-			Column: p.at().Column,
+			Line:   tok.LineNumber,
+			Column: tok.Column,
 		}
 	case Continue:
-		p.consume()
+		tok := p.consume()
 		return ContinueStatement{
 			Kind:   ContinueStatementNodeType,
-			Line:   p.at().LineNumber,
-			Column: p.at().Column,
+			Line:   tok.LineNumber,
+			Column: tok.Column,
 		}
 	case Import:
 		return p.parseImportStatement()
@@ -101,14 +101,13 @@ func (p *Parser) isControlFlowKeyword(t TokenType) bool {
 	}
 }
 func (p *Parser) parseImportStatement() Statement {
-
-	p.consume()
+	importTok := p.consume()
 	if p.at().Type == StringLiteralToken {
 		source := p.expect(StringLiteralToken, "expected string literal").Value
 		if p.at().Type == SemiColon {
 			p.consume()
 		}
-		return ImportStatement{Source: source, Kind: ImportStatementNodeType}
+		return ImportStatement{Source: source, Kind: ImportStatementNodeType, Line: importTok.LineNumber, Column: importTok.Column}
 	}
 	var specifiers []ImportSpecifier
 	for {
@@ -140,15 +139,19 @@ func (p *Parser) parseImportStatement() Statement {
 		Specifiers: specifiers,
 		Source:     source,
 		Kind:       ImportStatementNodeType,
+		Line:       importTok.LineNumber,
+		Column:     importTok.Column,
 	}
 }
 func (p *Parser) parseExportStatement() Statement {
-	p.consume()
+	exportTok := p.consume()
 	identifier := p.expect(IdentifierToken, "Expected identifier after export").Value
 	p.expect(SemiColon, "Expected ; after export declaration")
 	return ExportStatement{
 		Identifier: identifier,
 		Kind:       ExportStatementNodeType,
+		Line:       exportTok.LineNumber,
+		Column:     exportTok.Column,
 	}
 
 }
@@ -291,7 +294,8 @@ func (p *Parser) parseForStatement() Statement {
 
 }
 func (p *Parser) parseVariableDeclaration() Statement {
-	isConstant := p.consume().Type == Const
+	declTok := p.consume()
+	isConstant := declTok.Type == Const
 	identifier := p.expect(IdentifierToken, "Expected Identifier").Value
 	var typeAnnotation string
 	if p.at().Type == Colon {
@@ -304,14 +308,17 @@ func (p *Parser) parseVariableDeclaration() Statement {
 		if isConstant {
 			panic("Constant must be initialized")
 		}
-		return VariableDeclaration{Identifier: identifier, Constant: false, TypeAnnotation: typeAnnotation}
+		return VariableDeclaration{Kind: VariableDeclarationNodeType, Identifier: identifier, Constant: false, TypeAnnotation: typeAnnotation, Line: declTok.LineNumber, Column: declTok.Column}
 	}
 	p.expect(Equals, "Expected =")
 	declaration := VariableDeclaration{
+		Kind:           VariableDeclarationNodeType,
 		Identifier:     identifier,
 		Constant:       isConstant,
 		Value:          p.parseExpression(false),
 		TypeAnnotation: typeAnnotation,
+		Line:           declTok.LineNumber,
+		Column:         declTok.Column,
 	}
 	p.expect(SemiColon, "Expected ;")
 	return declaration
@@ -392,13 +399,13 @@ func (p *Parser) parseFunctionDeclaration() Statement {
 
 }
 func (p *Parser) parseReturnStatement() Statement {
-	p.consume()
+	returnTok := p.consume()
 	var value Expression
 	if p.at().Type != SemiColon {
 		value = p.parseExpression()
 	}
 	p.expect(SemiColon, "Expected ;")
-	return ReturnStatement{Value: value}
+	return ReturnStatement{Kind: ReturnStatementNodeType, Value: value, Line: returnTok.LineNumber, Column: returnTok.Column}
 }
 
 func (p *Parser) parseExpression(requireSemicolon ...bool) Expression {
@@ -412,19 +419,19 @@ func (p *Parser) parseAssignmentExpression(enforceSemicolon bool) Expression {
 	left := p.parseLogicalOrExpression()
 	switch p.at().Type {
 	case Equals:
-		p.consume()
+		opTok := p.consume()
 		value := p.parseAssignmentExpression(enforceSemicolon)
 		if enforceSemicolon {
 			p.expect(SemiColon, "Expected ;")
 		}
-		return AssignmentExpression{Assignee: left, Value: value, Operator: "="}
+		return AssignmentExpression{Kind: AssignmentExpressionNodeType, Assignee: left, Value: value, Operator: "=", Line: opTok.LineNumber, Column: opTok.Column}
 	case PlusEquals, MinusEquals, MultiplyEquals, DivideEquals:
 		operatorToken := p.consume()
 		value := p.parseAssignmentExpression(enforceSemicolon)
 		if enforceSemicolon {
 			p.expect(SemiColon, "Expected ;")
 		}
-		return AssignmentExpression{Assignee: left, Value: value, Operator: operatorToken.Value}
+		return AssignmentExpression{Kind: AssignmentExpressionNodeType, Assignee: left, Value: value, Operator: operatorToken.Value, Line: operatorToken.LineNumber, Column: operatorToken.Column}
 
 	}
 
@@ -433,9 +440,9 @@ func (p *Parser) parseAssignmentExpression(enforceSemicolon bool) Expression {
 func (p *Parser) parseLogicalOrExpression() Expression {
 	left := p.parseLogicalAndExpression()
 	for p.at().Type == Or {
-		p.consume()
+		opTok := p.consume()
 		right := p.parseLogicalAndExpression()
-		left = BinaryExpression{Left: left, Right: right, Operator: "||"}
+		left = BinaryExpression{Kind: BinaryExpressionNodeType, Left: left, Right: right, Operator: "||", Line: opTok.LineNumber, Column: opTok.Column}
 
 	}
 	return left
@@ -443,18 +450,18 @@ func (p *Parser) parseLogicalOrExpression() Expression {
 func (p *Parser) parseLogicalAndExpression() Expression {
 	left := p.parseEqualityExpression()
 	for p.at().Type == And {
-		p.consume()
+		opTok := p.consume()
 		right := p.parseLogicalAndExpression()
-		left = BinaryExpression{Left: left, Right: right, Operator: "&&"}
+		left = BinaryExpression{Kind: BinaryExpressionNodeType, Left: left, Right: right, Operator: "&&", Line: opTok.LineNumber, Column: opTok.Column}
 	}
 	return left
 }
 func (p *Parser) parseEqualityExpression() Expression {
 	left := p.parseRelationalExpression()
 	for p.at().Type == EqualsTo || p.at().Type == NotEqual {
-		operator := p.consume().Value
+		opTok := p.consume()
 		right := p.parseRelationalExpression()
-		left = BinaryExpression{Left: left, Right: right, Operator: operator}
+		left = BinaryExpression{Kind: BinaryExpressionNodeType, Left: left, Right: right, Operator: opTok.Value, Line: opTok.LineNumber, Column: opTok.Column}
 	}
 	return left
 }
@@ -462,27 +469,27 @@ func (p *Parser) parseEqualityExpression() Expression {
 func (p *Parser) parseRelationalExpression() Expression {
 	left := p.parseAdditiveExpression()
 	for p.at().Type == LessThan || p.at().Type == GreaterThan || p.at().Type == LessThanOrEqual || p.at().Type == GreaterThanOrEqual || p.at().Type == NotEqual || p.at().Type == EqualsTo {
-		operator := p.consume().Value
+		opTok := p.consume()
 		right := p.parseAdditiveExpression()
-		left = BinaryExpression{Left: left, Right: right, Operator: operator}
+		left = BinaryExpression{Kind: BinaryExpressionNodeType, Left: left, Right: right, Operator: opTok.Value, Line: opTok.LineNumber, Column: opTok.Column}
 	}
 	return left
 }
 func (p *Parser) parseAdditiveExpression() Expression {
 	left := p.parseMultiplicativeExpression()
 	for p.at().Value == "+" || p.at().Value == "-" {
-		operator := p.consume().Value
+		opTok := p.consume()
 		right := p.parseMultiplicativeExpression()
-		left = BinaryExpression{Left: left, Right: right, Operator: operator}
+		left = BinaryExpression{Kind: BinaryExpressionNodeType, Left: left, Right: right, Operator: opTok.Value, Line: opTok.LineNumber, Column: opTok.Column}
 	}
 	return left
 }
 func (p *Parser) parseMultiplicativeExpression() Expression {
 	left := p.parseCallMemberExpression()
 	for p.at().Value == "/" || p.at().Value == "*" || p.at().Value == "%" {
-		operator := p.consume().Value
+		opTok := p.consume()
 		right := p.parseCallMemberExpression()
-		left = BinaryExpression{Left: left, Right: right, Operator: operator}
+		left = BinaryExpression{Kind: BinaryExpressionNodeType, Left: left, Right: right, Operator: opTok.Value, Line: opTok.LineNumber, Column: opTok.Column}
 	}
 	return left
 }
@@ -495,7 +502,8 @@ func (p *Parser) parseCallMemberExpression() Expression {
 	return member
 }
 func (p *Parser) parseCallExpression(caller Expression) Expression {
-	callExpression := CallExpression{Callee: caller, Arguments: p.parseArgs()}
+	line, col := expressionPosition(caller)
+	callExpression := CallExpression{Kind: CallExpressionNodeType, Callee: caller, Arguments: p.parseArgs(), Line: line, Column: col}
 	if p.at().Type == OpenParam {
 		callExpression = p.parseCallExpression(callExpression).(CallExpression)
 	}
@@ -538,7 +546,7 @@ func (p *Parser) parseMemberExpression() Expression {
 			property = p.parseExpression()
 			p.expect(CloseBracket, "Expected ]")
 		}
-		object = MemberExpression{Object: object, Property: property, Computed: computed}
+		object = MemberExpression{Kind: MemberExpressionNodeType, Object: object, Property: property, Computed: computed, Line: operator.LineNumber, Column: operator.Column}
 	}
 	return object
 }
@@ -548,13 +556,13 @@ func (p *Parser) parseUnaryExpression() Expression {
 	if token.Type == Increment || token.Type == Decrement || token.Type == Not {
 		operator := p.consume().Value
 		operand := p.parsePrimaryExpression()
-		return UnaryExpression{Operator: operator, Operand: operand, Kind: UnaryExpressionNodeType}
+		return UnaryExpression{Operator: operator, Operand: operand, Kind: UnaryExpressionNodeType, Line: token.LineNumber, Column: token.Column}
 	}
 	return p.parsePrimaryExpression()
 }
 
 func (p *Parser) parseArrayLiteral() ArrayLiteral {
-	p.expect(OpenBracket, "Expected [")
+	open := p.expect(OpenBracket, "Expected [")
 	var elements []Expression
 	for p.notEOF() && p.at().Type != CloseBracket {
 		elements = append(elements, p.parseExpression(false))
@@ -563,7 +571,7 @@ func (p *Parser) parseArrayLiteral() ArrayLiteral {
 		}
 	}
 	p.expect(CloseBracket, "Unmatched ]")
-	return ArrayLiteral{Elements: elements}
+	return ArrayLiteral{Kind: ArrayLiteralNodeType, Elements: elements, Line: open.LineNumber, Column: open.Column}
 }
 
 func (p *Parser) parsePrimaryExpression() Expression {
@@ -587,7 +595,8 @@ func (p *Parser) parsePrimaryExpression() Expression {
 		token := p.consume()
 		return BooleanLiteral{Value: false, Kind: BooleanLiteralNodeType, Line: token.LineNumber, Column: token.Column}
 	case StringLiteralToken:
-		return StringLiteral{Value: p.consume().Value}
+		token := p.consume()
+		return StringLiteral{Kind: StringLiteralNodeType, Value: token.Value, Line: token.LineNumber, Column: token.Column}
 	case OpenParam:
 		p.consume()
 		value := p.parseExpression()
@@ -596,19 +605,19 @@ func (p *Parser) parsePrimaryExpression() Expression {
 	case OpenBracket:
 		return p.parseArrayLiteral()
 	case OpenBrace:
-		p.consume()
+		open := p.consume()
 		var properties []Property
 		for p.notEOF() && p.at().Type != CloseBrace {
 			key := p.expect(IdentifierToken, "Expected Identifier")
 			p.expect(Colon, "Expected :")
 			value := p.parseExpression(false)
-			properties = append(properties, Property{Key: key.Value, Value: value})
+			properties = append(properties, Property{Kind: PropertyNodeType, Key: key.Value, Value: value, Line: key.LineNumber, Column: key.Column})
 			if p.at().Type == Comma {
 				p.consume()
 			}
 		}
 		p.expect(CloseBrace, "Unmatched Brace")
-		return MapLiteral{Properties: properties, Kind: MapLiteralNodeType}
+		return MapLiteral{Properties: properties, Kind: MapLiteralNodeType, Line: open.LineNumber, Column: open.Column}
 	case Fn:
 		fnKeyword := p.consume()
 		params := p.parseParameters()
@@ -622,6 +631,7 @@ func (p *Parser) parsePrimaryExpression() Expression {
 			p.consume()
 			body := p.parseExpression(false)
 			return FunctionExpression{
+				Kind:       FunctionExpressionNodeType,
 				Parameters: params,
 				Body:       []Statement{body},
 				ReturnType: returnType,
@@ -631,6 +641,7 @@ func (p *Parser) parsePrimaryExpression() Expression {
 		} else {
 			var body = p.parseBlock()
 			return FunctionExpression{
+				Kind:       FunctionExpressionNodeType,
 				Parameters: params,
 				Body:       body,
 				ReturnType: returnType,
@@ -648,5 +659,40 @@ func (p *Parser) parsePrimaryExpression() Expression {
 	default:
 		panic(fmt.Sprintf("Parsing Error: Unexpcted token got %v on line: %d column: %d ", p.at().Type, p.at().LineNumber, p.at().Column))
 
+	}
+}
+
+func expressionPosition(expr Expression) (int, int) {
+	switch e := expr.(type) {
+	case Identifier:
+		return e.Line, e.Column
+	case NumericLiteral:
+		return e.Line, e.Column
+	case FloatLiteral:
+		return e.Line, e.Column
+	case BooleanLiteral:
+		return e.Line, e.Column
+	case StringLiteral:
+		return e.Line, e.Column
+	case UnaryExpression:
+		return e.Line, e.Column
+	case BinaryExpression:
+		return e.Line, e.Column
+	case AssignmentExpression:
+		return e.Line, e.Column
+	case MemberExpression:
+		return e.Line, e.Column
+	case CallExpression:
+		return e.Line, e.Column
+	case ArrayLiteral:
+		return e.Line, e.Column
+	case MapLiteral:
+		return e.Line, e.Column
+	case FunctionExpression:
+		return e.Line, e.Column
+	case AwaitExpression:
+		return e.Line, e.Column
+	default:
+		return 0, 0
 	}
 }
