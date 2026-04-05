@@ -1,0 +1,6 @@
+var inc = fn(n: number): number {
+    return n + 1;
+};
+print(inc("String"));
+fn square(x:number): number => x*x
+print(square(2));

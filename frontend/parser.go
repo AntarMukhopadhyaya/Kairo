@@ -48,13 +48,34 @@ func (p *Parser) GenerateAST(tokens []Token) Program {
 	}
 	return program
 }
+
+func (p *Parser) Parse(tokens []Token) (program Program, diagnostics []Diagnostic) {
+	program = Program{Kind: ProgramNodeType, Body: []Statement{}}
+	diagnostics = []Diagnostic{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			diagnostics = append(diagnostics, Diagnostic{
+				Message: fmt.Sprint(r),
+				Phase:   "parse",
+			})
+		}
+	}()
+
+	program = p.GenerateAST(tokens)
+	return program, diagnostics
+}
 func (p *Parser) parseStatement() Statement {
 	switch p.at().Type {
 
 	case Var, Const:
 		return p.parseVariableDeclaration()
 	case Fn, Async:
-		return p.parseFunctionDeclaration()
+		fnDecl := p.parseFunctionDeclaration()
+		if p.at().Type == SemiColon {
+			p.consume()
+		}
+		return fnDecl
 	case Return:
 		return p.parseReturnStatement()
 	case Try:
@@ -65,6 +86,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseWhileStatement()
 	case For:
 		return p.parseForStatement()
+	case Switch:
+		return p.parseSwitchStatement()
 	case Export:
 		return p.parseExportStatement()
 	case Break:
@@ -293,6 +316,62 @@ func (p *Parser) parseForStatement() Statement {
 	return ForStatement{Initial: initial, Condition: condition, Iteration: iteration, Body: body, Line: forKeyword.LineNumber, Column: forKeyword.Column}
 
 }
+
+func (p *Parser) parseSwitchClauseBody() []Statement {
+	if p.at().Type == FatArrow {
+		p.consume()
+		return []Statement{p.parseStatement()}
+	}
+	if p.at().Type == OpenBrace {
+		return p.parseBlock()
+	}
+	panic(fmt.Sprintf("Parsing Error: Expected '=>' or '{' in switch clause but got %v on line: %d column: %d", p.at().Type, p.at().LineNumber, p.at().Column))
+}
+
+func (p *Parser) parseSwitchStatement() Statement {
+	switchTok := p.consume()
+	expr := p.parseExpression(false)
+	p.expect(OpenBrace, "Expected '{' after switch expression")
+
+	var cases []CaseClause
+	var defaultBody []Statement
+	hasDefault := false
+
+	for p.notEOF() && p.at().Type != CloseBrace {
+		switch p.at().Type {
+		case Case:
+			p.consume()
+			test := p.parseExpression(false)
+			consequent := p.parseSwitchClauseBody()
+			cases = append(cases, CaseClause{
+				Kind:       CaseClauseNodeType,
+				Test:       test,
+				Consequent: consequent,
+			})
+		case Default:
+			if hasDefault {
+				panic(fmt.Sprintf("Parsing Error: Duplicate default clause in switch on line: %d column: %d", p.at().LineNumber, p.at().Column))
+			}
+			hasDefault = true
+			p.consume()
+			defaultBody = p.parseSwitchClauseBody()
+		default:
+			panic(fmt.Sprintf("Parsing Error: Expected 'case', 'default', or '}' in switch but got %v on line: %d column: %d", p.at().Type, p.at().LineNumber, p.at().Column))
+		}
+	}
+
+	p.expect(CloseBrace, "Expected '}' to close switch statement")
+
+	return SwitchStatement{
+		Kind:    SwitchStatementNodeType,
+		Expr:    expr,
+		Cases:   cases,
+		Default: defaultBody,
+		Line:    switchTok.LineNumber,
+		Column:  switchTok.Column,
+	}
+}
+
 func (p *Parser) parseVariableDeclaration() Statement {
 	declTok := p.consume()
 	isConstant := declTok.Type == Const
@@ -365,11 +444,20 @@ func (p *Parser) parseFunctionDeclaration() Statement {
 	}
 	if p.at().Type == FatArrow {
 		p.consume()
-		body := p.parseExpression(false)
+		bodyExpr := p.parseExpression(false)
+		line, col := expressionPosition(bodyExpr)
+		if line == 0 {
+			line, col = fnKeyword.LineNumber, fnKeyword.Column
+		}
 		return FunctionDeclaration{
 			Name:       name,
 			Parameters: params,
-			Body:       []Statement{body},
+			Body: []Statement{ReturnStatement{
+				Kind:   ReturnStatementNodeType,
+				Value:  bodyExpr,
+				Line:   line,
+				Column: col,
+			}},
 			Kind:       FunctionDeclarationNodeType,
 			ReturnType: returnType,
 			IsAsync:    isAsync,
@@ -629,11 +717,20 @@ func (p *Parser) parsePrimaryExpression() Expression {
 		}
 		if p.at().Type == FatArrow {
 			p.consume()
-			body := p.parseExpression(false)
+			bodyExpr := p.parseExpression(false)
+			line, col := expressionPosition(bodyExpr)
+			if line == 0 {
+				line, col = fnKeyword.LineNumber, fnKeyword.Column
+			}
 			return FunctionExpression{
 				Kind:       FunctionExpressionNodeType,
 				Parameters: params,
-				Body:       []Statement{body},
+				Body: []Statement{ReturnStatement{
+					Kind:   ReturnStatementNodeType,
+					Value:  bodyExpr,
+					Line:   line,
+					Column: col,
+				}},
 				ReturnType: returnType,
 				Line:       fnKeyword.LineNumber,
 				Column:     fnKeyword.Column,

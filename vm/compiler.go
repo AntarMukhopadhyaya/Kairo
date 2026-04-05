@@ -4,6 +4,7 @@ import (
 	"Kairo/frontend"
 	"Kairo/stdlib"
 	"Kairo/value"
+	"fmt"
 	"strings"
 )
 
@@ -155,6 +156,23 @@ func (c *Compiler) Compile(program frontend.Program) *Chunk {
 		c.optimizer.Optimize()
 	}
 	return c.chunk
+}
+
+func (c *Compiler) CompileWithDiagnostics(program frontend.Program) (chunk *Chunk, diagnostics []frontend.Diagnostic) {
+	diagnostics = []frontend.Diagnostic{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			diagnostics = append(diagnostics, frontend.Diagnostic{
+				Message: fmt.Sprint(r),
+				Phase:   "compile",
+			})
+			chunk = nil
+		}
+	}()
+
+	chunk = c.Compile(program)
+	return chunk, diagnostics
 }
 
 func (c *Compiler) EnableOptimizations(enabled bool) {
@@ -385,6 +403,43 @@ func (c *Compiler) compileStatement(stmt frontend.Statement) {
 		// 	c.patchJumpIfFalse(exitJump)
 		// }
 		// c.exitScope()
+
+	case frontend.SwitchStatement:
+		switchReg := c.compileExpression(s.Expr)
+		endJumps := make([]int, 0, len(s.Cases))
+
+		for _, caseClause := range s.Cases {
+			testReg := c.compileExpression(caseClause.Test)
+			matchReg := c.newRegister()
+			c.emit(OP_EQUAL, matchReg, switchReg, testReg)
+			c.freeRegister(testReg)
+
+			jumpIfNotMatch := c.emitJumpIfFalse(matchReg)
+			c.freeRegister(matchReg)
+
+			c.enterScope()
+			for _, stmt := range caseClause.Consequent {
+				c.compileStatement(stmt)
+			}
+			c.exitScope()
+
+			endJumps = append(endJumps, c.emitJump())
+			c.patchJumpIfFalse(jumpIfNotMatch)
+		}
+
+		if len(s.Default) > 0 {
+			c.enterScope()
+			for _, stmt := range s.Default {
+				c.compileStatement(stmt)
+			}
+			c.exitScope()
+		}
+
+		for _, jump := range endJumps {
+			c.patchJump(jump)
+		}
+
+		c.freeRegister(switchReg)
 
 	case frontend.FunctionDeclaration:
 		funcChunk := NewChunk()
@@ -1147,6 +1202,11 @@ func statementLocation(stmt frontend.Statement) (int, int) {
 		return s.Line, s.Column
 	case frontend.ExportStatement:
 		return s.Line, s.Column
+	case frontend.SwitchStatement:
+		if s.Line > 0 {
+			return s.Line, s.Column
+		}
+		return expressionLocation(s.Expr)
 	case frontend.Expression:
 		return expressionLocation(s)
 	default:

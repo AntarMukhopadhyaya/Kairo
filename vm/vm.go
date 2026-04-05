@@ -932,6 +932,23 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				vm.handlers = vm.handlers[:len(vm.handlers)-1]
 			}
 
+		case OP_THROW:
+			errVal := frame.regs[instr.A]
+
+			if errVal.Kind != value.ErrorKind {
+				errVal = value.MakeError(
+					errVal.ToString(),
+					"RuntimeError",
+					instr.Line,
+					instr.Column,
+				)
+			}
+
+			if vm.handleError(errVal) {
+				continue
+			}
+			return errVal
+
 		case OP_GET_UPVALUE:
 			dest := instr.A
 			idx := instr.B

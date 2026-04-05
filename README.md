@@ -120,7 +120,32 @@ for (var i = 0; i < 5; i = i + 1) {
     if (i == 4) break;
     print(i);
 }
+
+switch (x) {
+    case 1 => print("one")
+    case 2 => print("two")
+    default => print("other")
+}
+
+switch (x) {
+    case 1 {
+        print("one");
+        print("again");
+    }
+    case 2 {
+        print("two");
+    }
+    default {
+        print("other");
+    }
+}
 ```
+
+Switch notes:
+
+- Supports both single-statement arrow clauses (`case value => statement`) and block clauses (`case value { ... }`).
+- `default` supports both forms as well.
+- Switch does not fall through between cases.
 
 ## Error handling
 
@@ -222,7 +247,6 @@ Built-in methods include common operations such as:
 
 Based on current source and roadmap docs, these areas remain incomplete or in-progress:
 
-- `switch/case` parsing/execution is not fully wired in the current parser/compiler path
 - `throw` statement semantics are not fully exposed as user-facing syntax despite VM throw support
 - Full `export` semantics are pending in compiler/runtime execution paths
 - Advanced modern syntax: destructuring, spread/rest, template literals, ternary, optional chaining
@@ -235,7 +259,7 @@ The roadmap naturally breaks into three tracks:
 
 ### Near term
 
-- Complete control-flow polish (`switch/case`, final throw semantics)
+- Complete remaining control-flow polish (final throw statement syntax/ergonomics)
 - Add high-value syntax sugar (template literals, default params, ternary)
 - Keep strengthening loop and error-path correctness tests
 

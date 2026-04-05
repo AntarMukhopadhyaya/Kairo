@@ -48,6 +48,8 @@ const (
 	Increment          TokenType = "INCREMENT"
 	Decrement          TokenType = "DECREMENT"
 	Switch             TokenType = "SWITCH"
+	Case               TokenType = "CASE"
+	Default            TokenType = "DEFAULT"
 	Return             TokenType = "RETURN"
 	For                TokenType = "FOR"
 	Break              TokenType = "BREAK"
@@ -93,6 +95,8 @@ func NewLexer() *Lexer {
 		"catch":    Catch,
 		"finally":  Finally,
 		"switch":   Switch,
+		"case":     Case,
+		"default":  Default,
 		"return":   Return,
 		"for":      For,
 		"break":    Break,

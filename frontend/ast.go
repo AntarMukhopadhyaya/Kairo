@@ -36,6 +36,8 @@ const (
 	BreakStatementNodeType       NodeType = "BreakStatement"
 	ContinueStatementNodeType    NodeType = "ContinueStatement"
 	ExportStatementNodeType      NodeType = "ExportStatement"
+	SwitchStatementNodeType      NodeType = "SwitchStatement"
+	CaseClauseNodeType           NodeType = "CaseClause"
 )
 
 type Statement interface {
@@ -444,4 +446,27 @@ type ExportStatement struct {
 
 func (e ExportStatement) GetKind() NodeType {
 	return ExportStatementNodeType
+}
+
+type SwitchStatement struct {
+	Kind    NodeType
+	Expr    Expression
+	Cases   []CaseClause
+	Default []Statement
+	Line    int
+	Column  int
+}
+
+func (s SwitchStatement) GetKind() NodeType {
+	return SwitchStatementNodeType
+}
+
+type CaseClause struct {
+	Kind       NodeType
+	Test       Expression
+	Consequent []Statement
+}
+
+func (c CaseClause) GetKind() NodeType {
+	return CaseClauseNodeType
 }

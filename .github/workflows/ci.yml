@@ -43,6 +43,9 @@ jobs:
       - name: Unit tests
         run: go test ./... -count=1 -v
 
+      - name: Script regression suite
+        run: go test ./tests -count=1 -v
+
       - name: Coverage profile
         run: go test ./... -count=1 -coverprofile=coverage.out
 

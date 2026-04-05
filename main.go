@@ -23,6 +23,20 @@ const (
 	red    = "\033[31m"
 )
 
+func printDiagnostics(diags []frontend.Diagnostic) {
+	for _, d := range diags {
+		loc := ""
+		if d.Line > 0 {
+			loc = fmt.Sprintf(" at %d:%d", d.Line, d.Column)
+		}
+		phase := d.Phase
+		if phase == "" {
+			phase = "unknown"
+		}
+		fmt.Printf(red+"[%s]%s %s\n"+reset, phase, loc, d.Message)
+	}
+}
+
 // Function to execute SlimScript source code
 func startREPL(optimize bool, profile bool) {
 	fmt.Println(green + "Welcome to Kairo REPL! Type 'exit' to quit." + reset)
@@ -61,14 +75,22 @@ func executeSourceCodeWithEnv(src string, globals []vm.VariableInfo, slots map[s
 		return globals
 	}
 
-	program := parser.GenerateAST(tokens)
+	program, parseDiags := parser.Parse(tokens)
+	if len(parseDiags) > 0 {
+		printDiagnostics(parseDiags)
+		return globals
+	}
 
 	// 🔥 Use the same environment across executions
 	comp := compiler.NewCompiler()
 	comp.SetGlobalSlots(slots)
 	comp.EnableOptimizations(optimize)
 	vm.EnsureBuiltinSlots(slots)
-	chunk := comp.Compile(program)
+	chunk, compileDiags := comp.CompileWithDiagnostics(program)
+	if len(compileDiags) > 0 {
+		printDiagnostics(compileDiags)
+		return globals
+	}
 
 	globals = vm.EnsureGlobalsSize(globals, slots)
 
@@ -121,13 +143,21 @@ func executeFile(filename string, optimize bool, profile bool) {
 		fmt.Println(yellow, "Error during tokenization:", err, reset)
 		return
 	}
-	program := parser.GenerateAST(tokens)
+	program, parseDiags := parser.Parse(tokens)
+	if len(parseDiags) > 0 {
+		printDiagnostics(parseDiags)
+		return
+	}
 
 	comp := compiler.NewCompiler()
 	comp.SetGlobalSlots(slots)
 	comp.EnableOptimizations(optimize)
 	vm.EnsureBuiltinSlots(slots)
-	chunk := comp.Compile(program)
+	chunk, compileDiags := comp.CompileWithDiagnostics(program)
+	if len(compileDiags) > 0 {
+		printDiagnostics(compileDiags)
+		return
+	}
 
 	globals = vm.EnsureGlobalsSize(globals, slots)
 
@@ -186,7 +216,11 @@ func compileFile(inputFile string, outputFile string, optimize bool) {
 	}
 
 	parser := frontend.Parser{}
-	program := parser.GenerateAST(tokens)
+	program, parseDiags := parser.Parse(tokens)
+	if len(parseDiags) > 0 {
+		printDiagnostics(parseDiags)
+		return
+	}
 
 	// Compile
 	slots := make(map[string]int)
@@ -195,7 +229,11 @@ func compileFile(inputFile string, outputFile string, optimize bool) {
 	comp := compiler.NewCompiler()
 	comp.SetGlobalSlots(slots)
 	comp.EnableOptimizations(optimize)
-	chunk := comp.Compile(program)
+	chunk, compileDiags := comp.CompileWithDiagnostics(program)
+	if len(compileDiags) > 0 {
+		printDiagnostics(compileDiags)
+		return
+	}
 
 	// Determine output filename
 	if outputFile == "" {
