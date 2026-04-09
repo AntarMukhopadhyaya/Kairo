@@ -87,8 +87,32 @@ type VariableInfo struct {
 }
 
 type Upvalue struct {
+	RefCount int
 	location *value.Value
 	closed   value.Value
+}
+
+func IncUpvalue(up *Upvalue) {
+	if up == nil {
+		return
+	}
+	up.RefCount++
+}
+
+func DecUpvalue(up *Upvalue) {
+	if up == nil {
+		return
+	}
+	up.RefCount--
+	if up.RefCount == 0 {
+		FreeUpvalue(up)
+	}
+}
+
+func FreeUpvalue(up *Upvalue) {
+	if up.location == &up.closed {
+		value.Dec(up.closed)
+	}
 }
 
 func (frame *CallFrame) captureUpvalue(localReg int) *Upvalue {
@@ -98,7 +122,7 @@ func (frame *CallFrame) captureUpvalue(localReg int) *Upvalue {
 	if up, ok := frame.openUpvalues[localReg]; ok {
 		return up
 	}
-	up := &Upvalue{location: &frame.regs[localReg]}
+	up := &Upvalue{RefCount: 1, location: &frame.regs[localReg]}
 	frame.openUpvalues[localReg] = up
 	return up
 }
@@ -108,8 +132,10 @@ func (frame *CallFrame) closeUpvalues() {
 		return
 	}
 	for _, up := range frame.openUpvalues {
+		value.Inc(*up.location)
 		up.closed = *up.location
 		up.location = &up.closed
+		DecUpvalue(up)
 	}
 	frame.openUpvalues = nil
 }
@@ -240,7 +266,7 @@ func (vm *VM) handleError(errorVal value.Value) bool {
 
 			// Store the error in the error register (if specified)
 			if handler.errorReg >= 0 && handler.errorReg < len(frame.regs) {
-				frame.regs[handler.errorReg] = errorVal
+				value.Assign(&frame.regs[handler.errorReg], errorVal)
 			}
 
 			// Jump to the catch handler
@@ -276,10 +302,23 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 		regs:    vm.allocRegs(closure.Function.MaxRegisters),
 	}
 	vm.frames = append(vm.frames, frame)
+	defer func() {
+		for len(vm.frames) > 0 {
+			frame := &vm.frames[len(vm.frames)-1]
+			for i := range frame.regs {
+				value.Dec(frame.regs[i])
+			}
+			vm.freeRegs(frame.regs)
+			vm.frames = vm.frames[:len(vm.frames)-1]
+		}
+	}()
 
 	for len(vm.frames) > 0 {
 		frame := &vm.frames[len(vm.frames)-1]
 		if frame.ip >= len(frame.closure.Function.Chunk.Code) {
+			for i := range frame.regs {
+				value.Dec(frame.regs[i])
+			}
 			vm.frames = vm.frames[:len(vm.frames)-1]
 			if len(vm.frames) == 0 {
 				vm.freeRegs(frame.regs)
@@ -297,23 +336,21 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 
 		switch instr.Op {
 		case OP_LOAD_CONST:
-			frame.regs[instr.A] = frame.closure.Function.Chunk.Constants[instr.B]
+			value.Assign(&frame.regs[instr.A], frame.closure.Function.Chunk.Constants[instr.B])
 
 		case OP_GET_GLOBAL:
 			slot := instr.B
 			if slot >= 0 && slot < len(vm.Globals) {
-				frame.regs[instr.A] = vm.Globals[slot].Value
+				value.Assign(&frame.regs[instr.A], vm.Globals[slot].Value)
 			} else {
-				frame.regs[instr.A] = value.MakeNull()
+				value.Assign(&frame.regs[instr.A], value.MakeNull())
 			}
 
 		case OP_SET_GLOBAL:
 			slot := instr.B
 			if slot >= 0 {
 				vm.ensureGlobalsSize(slot + 1)
-				info := vm.Globals[slot]
-				info.Value = frame.regs[instr.A]
-				vm.Globals[slot] = info
+				value.Assign(&vm.Globals[slot].Value, frame.regs[instr.A])
 			}
 
 		case OP_DEFINE_GLOBAL:
@@ -321,6 +358,7 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			if slot >= 0 {
 				vm.ensureGlobalsSize(slot + 1)
 				newVal := frame.regs[instr.A]
+				oldVal := vm.Globals[slot].Value
 
 				// Special case: Don't overwrite existing non-null values with null
 				// This happens when loading bytecode where stdlib functions were serialized as null
@@ -332,10 +370,12 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					}
 				}
 
+				value.Inc(newVal)
 				vm.Globals[slot] = VariableInfo{
 					Value: newVal,
 					Type:  "",
 				}
+				value.Dec(oldVal)
 			}
 
 		case OP_DEFINE_TYPED_GLOBAL:
@@ -344,40 +384,45 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			if instr.C >= 0 && instr.C < len(frame.closure.Function.Chunk.Constants) {
 				typeVal := frame.closure.Function.Chunk.Constants[instr.C]
 				if typeVal.Kind == value.StringKind {
-					typeStr = typeVal.Obj.(string)
+					typeStr = typeVal.Obj.Data.(string)
 				}
 			}
 			if slot >= 0 {
 				vm.ensureGlobalsSize(slot + 1)
+				oldVal := vm.Globals[slot].Value
+				value.Inc(frame.regs[instr.A])
 				vm.Globals[slot] = VariableInfo{
 					Value: frame.regs[instr.A],
 					Type:  typeStr,
 				}
+				value.Dec(oldVal)
 			}
 
 		case OP_ADD:
 			result := add(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_ADD_INT:
 			a := frame.regs[instr.B]
 			b := frame.regs[instr.C]
 			if a.Kind == value.NumberKind && b.Kind == value.NumberKind && a.Num == math.Trunc(a.Num) && b.Num == math.Trunc(b.Num) {
-				frame.regs[instr.A] = value.MakeNumber(a.Num + b.Num)
+				value.Assign(&frame.regs[instr.A], value.MakeNumber(a.Num+b.Num))
 			} else {
 				result := add(a, b)
 				result = withInstrLocation(result, instr)
-				frame.regs[instr.A] = result
+				value.Assign(&frame.regs[instr.A], result)
 				if result.Kind == value.ErrorKind {
 					if vm.handleError(result) {
 						continue
 					}
+					value.Inc(result)
 					return result
 				}
 			}
@@ -385,15 +430,16 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			a := frame.regs[instr.B]
 			b := frame.regs[instr.C]
 			if a.Kind == value.NumberKind && b.Kind == value.NumberKind {
-				frame.regs[instr.A] = value.MakeNumber(a.Num + b.Num)
+				value.Assign(&frame.regs[instr.A], value.MakeNumber(a.Num+b.Num))
 			} else {
 				result := add(a, b)
 				result = withInstrLocation(result, instr)
-				frame.regs[instr.A] = result
+				value.Assign(&frame.regs[instr.A], result)
 				if result.Kind == value.ErrorKind {
 					if vm.handleError(result) {
 						continue
 					}
+					value.Inc(result)
 					return result
 				}
 			}
@@ -401,15 +447,16 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			a := frame.regs[instr.B]
 			b := frame.regs[instr.C]
 			if value.IsStringLike(a) && value.IsStringLike(b) {
-				frame.regs[instr.A] = value.ConcatStrings(a, b)
+				value.Assign(&frame.regs[instr.A], value.ConcatStrings(a, b))
 			} else {
 				result := add(a, b)
 				result = withInstrLocation(result, instr)
-				frame.regs[instr.A] = result
+				value.Assign(&frame.regs[instr.A], result)
 				if result.Kind == value.ErrorKind {
 					if vm.handleError(result) {
 						continue
 					}
+					value.Inc(result)
 					return result
 				}
 			}
@@ -418,14 +465,15 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			b := frame.regs[instr.B]
 			result := add(a, b)
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if instr.C >= 0 && instr.C < len(frame.regs) {
-				frame.regs[instr.C] = result
+				value.Assign(&frame.regs[instr.C], result)
 			}
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_SUB_LOCAL:
@@ -433,14 +481,15 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			b := frame.regs[instr.B]
 			result := sub(a, b)
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if instr.C >= 0 && instr.C < len(frame.regs) {
-				frame.regs[instr.C] = result
+				value.Assign(&frame.regs[instr.C], result)
 			}
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_MUL_LOCAL:
@@ -448,81 +497,87 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			b := frame.regs[instr.B]
 			result := mul(a, b)
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if instr.C >= 0 && instr.C < len(frame.regs) {
-				frame.regs[instr.C] = result
+				value.Assign(&frame.regs[instr.C], result)
 			}
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_SUB:
 			result := sub(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_MUL:
 			result := mul(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_DIV:
 			result := div(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_EQUAL:
-			frame.regs[instr.A] = equal(frame.regs[instr.B], frame.regs[instr.C])
+			value.Assign(&frame.regs[instr.A], equal(frame.regs[instr.B], frame.regs[instr.C]))
 		case OP_GREATER:
 			result := greater(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_LESS:
 			result := less(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 		case OP_NOT_EQUAL:
 			eqResult := equal(frame.regs[instr.B], frame.regs[instr.C])
-			frame.regs[instr.A] = value.MakeBool(!eqResult.Bool)
+			value.Assign(&frame.regs[instr.A], value.MakeBool(!eqResult.Bool))
 		case OP_LESS_EQUAL:
-			frame.regs[instr.A] = value.MakeBool(frame.regs[instr.B].Num <= frame.regs[instr.C].Num)
+			value.Assign(&frame.regs[instr.A], value.MakeBool(frame.regs[instr.B].Num <= frame.regs[instr.C].Num))
 		case OP_GREATER_EQUAL:
-			frame.regs[instr.A] = value.MakeBool(frame.regs[instr.B].Num >= frame.regs[instr.C].Num)
+			value.Assign(&frame.regs[instr.A], value.MakeBool(frame.regs[instr.B].Num >= frame.regs[instr.C].Num))
 		case OP_NOT:
 
 			dest := instr.A
 			src := instr.B
 			v := frame.regs[src]
-			frame.regs[dest] = value.MakeBool(isFalsey(v))
+			value.Assign(&frame.regs[dest], value.MakeBool(isFalsey(v)))
 		case OP_JUMP:
 			// Check if there's an active handler with a finally block
 			if handlerIdx, hasHandler := vm.findActiveHandlerForFrame(); hasHandler {
@@ -574,21 +629,27 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					Value:    result,
 					ResumeIP: -1, // Special marker: return from finally, use stored value
 				}
+				value.Inc(result)
 				frame.ip = handler.finallyIP
 			} else {
 				// No finally block, execute return normally
+				value.Inc(result)
 				frame.closeUpvalues()
+				for i := range frame.regs {
+					value.Dec(frame.regs[i])
+				}
 				vm.freeRegs(frame.regs)
 				vm.frames = vm.frames[:len(vm.frames)-1]
 				if len(vm.frames) == 0 {
 					return result
 				}
 				caller := &vm.frames[len(vm.frames)-1]
-				caller.regs[frame.ReturnReg] = result
+				value.Assign(&caller.regs[frame.ReturnReg], result)
+				value.Dec(result)
 			}
 
 		case OP_MOVE:
-			frame.regs[instr.A] = frame.regs[instr.B]
+			value.Assign(&frame.regs[instr.A], frame.regs[instr.B])
 
 		case OP_CALL:
 			dest := instr.A
@@ -602,23 +663,25 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				fn := callee.AsInternalFunction()
 				if fn.Arity != -1 && fn.Arity != argCount {
 					errVal := runtimeErrorAt(instr, "wrong number of arguments", "ArgumentError")
-					frame.regs[dest] = errVal
+					value.Assign(&frame.regs[dest], errVal)
 					if vm.handleError(errVal) {
 						continue
 					}
+					value.Inc(errVal)
 					return errVal
 				}
 				var args []value.Value
 				if argCount > 0 {
 					args = frame.regs[argStart : argStart+argCount]
 				}
-				result := fn.Call(args)
+				result := fn.Call(vm, args)
 				result = withInstrLocation(result, instr)
-				frame.regs[dest] = result
+				value.Assign(&frame.regs[dest], result)
 				if result.Kind == value.ErrorKind {
 					if vm.handleError(result) {
 						continue
 					}
+					value.Inc(result)
 					return result
 				}
 
@@ -626,10 +689,11 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				cl := AsClosure(callee)
 				if cl.Function.Arity != argCount {
 					errVal := runtimeErrorAt(instr, "wrong number of arguments", "ArgumentError")
-					frame.regs[dest] = errVal
+					value.Assign(&frame.regs[dest], errVal)
 					if vm.handleError(errVal) {
 						continue
 					}
+					value.Inc(errVal)
 					return errVal
 				}
 				newFrame := CallFrame{
@@ -639,7 +703,7 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					ReturnReg: dest,
 				}
 				for i := 0; i < argCount; i++ {
-					newFrame.regs[i] = frame.regs[argStart+i]
+					value.Assign(&newFrame.regs[i], frame.regs[argStart+i])
 				}
 				vm.frames = append(vm.frames, newFrame)
 
@@ -647,10 +711,11 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				fn := AsFunction(callee)
 				if fn.Arity != argCount {
 					errVal := runtimeErrorAt(instr, "wrong number of arguments", "ArgumentError")
-					frame.regs[dest] = errVal
+					value.Assign(&frame.regs[dest], errVal)
 					if vm.handleError(errVal) {
 						continue
 					}
+					value.Inc(errVal)
 					return errVal
 				}
 				cl := &ClosureObject{Function: fn, Upvalues: nil}
@@ -661,16 +726,17 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					ReturnReg: dest,
 				}
 				for i := 0; i < argCount; i++ {
-					newFrame.regs[i] = frame.regs[argStart+i]
+					value.Assign(&newFrame.regs[i], frame.regs[argStart+i])
 				}
 				vm.frames = append(vm.frames, newFrame)
 
 			default:
 				errVal := runtimeErrorAt(instr, "not callable", "TypeError")
-				frame.regs[dest] = errVal
+				value.Assign(&frame.regs[dest], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
 
@@ -689,12 +755,14 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					}
 					if desc.IsLocal {
 						closure.Upvalues[i] = frame.captureUpvalue(desc.Index)
+						IncUpvalue(closure.Upvalues[i])
 					} else {
 						closure.Upvalues[i] = frame.closure.Upvalues[desc.Index]
+						IncUpvalue(closure.Upvalues[i])
 					}
 				}
 			}
-			frame.regs[instr.A] = MakeClosure(closure)
+			value.Assign(&frame.regs[instr.A], MakeClosure(closure))
 
 		case OP_BUILD_ARRAY:
 			count := instr.B
@@ -702,7 +770,7 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			for i := 0; i < count; i++ {
 				elements[i] = frame.regs[instr.C+i]
 			}
-			frame.regs[instr.A] = value.MakeArray(elements)
+			value.Assign(&frame.regs[instr.A], value.MakeArray(elements))
 
 		case OP_BUILD_MAP:
 			count := instr.B
@@ -712,16 +780,17 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 				keyVal := frame.regs[instr.C+2*i]
 				if !value.IsStringLike(keyVal) {
 					errVal := runtimeErrorAt(instr, "map key must be a string", "TypeError")
-					frame.regs[instr.A] = errVal
+					value.Assign(&frame.regs[instr.A], errVal)
 					if vm.handleError(errVal) {
 						continue
 					}
+					value.Inc(errVal)
 					return errVal
 				}
 				val := frame.regs[instr.C+2*i+1]
 				props[keyVal.ToString()] = val
 			}
-			frame.regs[instr.A] = value.MakeMap(props)
+			value.Assign(&frame.regs[instr.A], value.MakeMap(props))
 
 		case OP_GET_PROPERTY:
 			keyIdx := instr.C
@@ -733,10 +802,11 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					instr.Line,
 					instr.Column,
 				)
-				frame.regs[instr.A] = errVal
+				value.Assign(&frame.regs[instr.A], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
 			obj := frame.regs[instr.B]
@@ -747,18 +817,19 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					instr.Line,
 					instr.Column,
 				)
-				frame.regs[instr.A] = errVal
+				value.Assign(&frame.regs[instr.A], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			} else {
 				m := obj.AsMap()
-				key := keyVal.Obj.(string)
+				key := keyVal.Obj.Data.(string)
 				if val, exists := m.Properties[key]; exists {
-					frame.regs[instr.A] = val
+					value.Assign(&frame.regs[instr.A], val)
 				} else {
-					frame.regs[instr.A] = value.MakeNull()
+					value.Assign(&frame.regs[instr.A], value.MakeNull())
 				}
 			}
 
@@ -767,16 +838,24 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			keyVal := frame.closure.Function.Chunk.Constants[keyIdx]
 			if keyVal.Kind != value.StringKind {
 				errVal := value.MakeError("Attempting to set property with non-string key", "TypeError", instr.Line, instr.Column)
-				frame.regs[instr.A] = errVal
+				value.Assign(&frame.regs[instr.A], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
 			obj := frame.regs[instr.B]
 			val := frame.regs[instr.A]
 			if obj.Kind == value.MapKind {
-				obj.AsMap().Properties[keyVal.Obj.(string)] = val
+				m := obj.AsMap()
+				key := keyVal.Obj.Data.(string)
+				old, exists := m.Properties[key]
+				value.Inc(val)
+				if exists {
+					value.Dec(old)
+				}
+				m.Properties[key] = val
 			}
 
 		case OP_GET_INDEX:
@@ -791,9 +870,9 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					i := int(idx.Num)
 					arr := obj.AsArray()
 					if i >= 0 && i < len(arr.Elements) {
-						frame.regs[instr.A] = arr.Elements[i]
+						value.Assign(&frame.regs[instr.A], arr.Elements[i])
 					} else {
-						frame.regs[instr.A] = value.MakeNull()
+						value.Assign(&frame.regs[instr.A], value.MakeNull())
 					}
 				}
 			case value.MapKind:
@@ -801,9 +880,9 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					m := obj.AsMap()
 					key := idx.ToString()
 					if val, exists := m.Properties[key]; exists {
-						frame.regs[instr.A] = val
+						value.Assign(&frame.regs[instr.A], val)
 					} else {
-						frame.regs[instr.A] = value.MakeNull()
+						value.Assign(&frame.regs[instr.A], value.MakeNull())
 					}
 				}
 			}
@@ -842,11 +921,21 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 					} else {
 						arr.Elements = arr.Elements[:needed]
 					}
+					old := arr.Elements[i]
+					value.Inc(val)
+					value.Dec(old)
 					arr.Elements[i] = val
 				}
 			case value.MapKind:
 				if value.IsStringLike(idx) {
-					obj.AsMap().Properties[idx.ToString()] = val
+					m := obj.AsMap()
+					key := idx.ToString()
+					old, exists := m.Properties[key]
+					value.Inc(val)
+					if exists {
+						value.Dec(old)
+					}
+					m.Properties[key] = val
 				}
 			}
 
@@ -855,24 +944,26 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			nameConst := frame.closure.Function.Chunk.Constants[instr.B]
 			if nameConst.Kind != value.StringKind {
 				errVal := runtimeErrorAt(instr, "module name must be a string", "TypeError")
-				frame.regs[dest] = errVal
+				value.Assign(&frame.regs[dest], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
-			moduleName := nameConst.Obj.(string)
+			moduleName := nameConst.Obj.Data.(string)
 
 			module, ok := vm.modules[moduleName]
 			if !ok {
 				errVal := runtimeErrorAt(instr, "Module not found: "+moduleName, "ModuleError")
-				frame.regs[dest] = errVal
+				value.Assign(&frame.regs[dest], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
-			frame.regs[dest] = module
+			value.Assign(&frame.regs[dest], module)
 
 		case OP_POP:
 			// Do nothing - register-based VM doesn't have explicit stack
@@ -917,13 +1008,18 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 						result := signal.Value
 						vm.handlers = vm.handlers[:len(vm.handlers)-1]
 						frame.closeUpvalues()
+						for i := range frame.regs {
+							value.Dec(frame.regs[i])
+						}
 						vm.freeRegs(frame.regs)
 						vm.frames = vm.frames[:len(vm.frames)-1]
 						if len(vm.frames) == 0 {
+							value.Inc(result)
 							return result
 						}
 						caller := &vm.frames[len(vm.frames)-1]
-						caller.regs[frame.ReturnReg] = result
+						value.Assign(&caller.regs[frame.ReturnReg], result)
+						value.Dec(result)
 						continue // Skip normal processing
 					}
 				}
@@ -947,27 +1043,29 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			if vm.handleError(errVal) {
 				continue
 			}
+			value.Inc(errVal)
 			return errVal
 
 		case OP_GET_UPVALUE:
 			dest := instr.A
 			idx := instr.B
 			up := frame.closure.Upvalues[idx]
-			frame.regs[dest] = *up.location
+			value.Assign(&frame.regs[dest], *up.location)
 		case OP_SET_UPVALUE:
 			src := instr.A
 			idx := instr.B
 			up := frame.closure.Upvalues[idx]
-			*up.location = frame.regs[src]
+			value.Assign(up.location, frame.regs[src])
 
 		case OP_MOD:
 			result := mod(frame.regs[instr.B], frame.regs[instr.C])
 			result = withInstrLocation(result, instr)
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 			if result.Kind == value.ErrorKind {
 				if vm.handleError(result) {
 					continue
 				}
+				value.Inc(result)
 				return result
 			}
 
@@ -981,33 +1079,36 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 
 			if methodNameVal.Kind != value.StringKind {
 				errVal := runtimeErrorAt(instr, "method name must be a string", "TypeError")
-				frame.regs[instr.A] = errVal
+				value.Assign(&frame.regs[instr.A], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
 
-			methodName := methodNameVal.Obj.(string)
+			methodName := methodNameVal.Obj.Data.(string)
 
 			// Lookup method by type
 			methodMap, exists := vm.methodRegistry[objVal.Kind]
 			if !exists {
 				errVal := runtimeErrorAt(instr, fmt.Sprintf("Type %v has no methods", objVal.Kind), "TypeError")
-				frame.regs[instr.A] = errVal
+				value.Assign(&frame.regs[instr.A], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
 
 			method, exists := methodMap[methodName]
 			if !exists {
 				errVal := runtimeErrorAt(instr, fmt.Sprintf("Method '%s' not found on type %v", methodName, objVal.Kind), "AttributeError")
-				frame.regs[instr.A] = errVal
+				value.Assign(&frame.regs[instr.A], errVal)
 				if vm.handleError(errVal) {
 					continue
 				}
+				value.Inc(errVal)
 				return errVal
 			}
 
@@ -1023,18 +1124,19 @@ func (vm *VM) Run(closure *ClosureObject) value.Value {
 			}
 
 			// Call method
-			result := method.Call(fullArgs)
+			result := method.Call(vm, fullArgs)
 			result = withInstrLocation(result, instr)
 
 			// Check for error
 			if result.Kind == value.ErrorKind {
 				if !vm.handleError(result) {
+					value.Inc(result)
 					return result
 				}
 				continue
 			}
 
-			frame.regs[instr.A] = result
+			value.Assign(&frame.regs[instr.A], result)
 		case OP_NOP:
 			// Do nothing
 		}

@@ -38,7 +38,7 @@ func RegisterBuiltins(globals []VariableInfo, slots map[string]int) {
 	globals[slots["print"]] = VariableInfo{
 		Value: value.MakeInternalFunction(&value.InternalFunctionObject{
 			Arity: -1, // variadic
-			Call: func(args []value.Value) value.Value {
+			Call: func(vm value.CallContext, args []value.Value) value.Value {
 				for _, arg := range args {
 					fmt.Print(arg.ToString(), " ")
 				}
@@ -52,7 +52,7 @@ func RegisterBuiltins(globals []VariableInfo, slots map[string]int) {
 	globals[slots["len"]] = VariableInfo{
 		Value: value.MakeInternalFunction(&value.InternalFunctionObject{
 			Arity: 1,
-			Call: func(args []value.Value) value.Value {
+			Call: func(vm value.CallContext, args []value.Value) value.Value {
 				if len(args) != 1 {
 					return value.MakeError(
 						"len() takes exactly one argument",

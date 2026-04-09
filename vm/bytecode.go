@@ -152,7 +152,7 @@ func (bw *BytecodeWriter) writeConstant(c value.Value) error {
 		if err := bw.writeByte(ConstString); err != nil {
 			return err
 		}
-		return bw.writeString(c.Obj.(string))
+		return bw.writeString(c.Obj.Data.(string))
 
 	case value.BoolKind:
 		if err := bw.writeByte(ConstBool); err != nil {
@@ -670,3 +670,4 @@ func (br *BytecodeReader) readGlobalSlots() (map[string]int, error) {
 
 	return slots, nil
 }
+

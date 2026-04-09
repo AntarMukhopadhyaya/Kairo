@@ -1,0 +1,12 @@
+print("=== map/filter/reduce nested ===");
+
+var factor = 3;
+var arr = [1, 2, 3, 4];
+
+var mapped = arr.map(fn(x) => x * factor);
+var filtered = mapped.filter(fn(x) => x > 6);
+var total = filtered.reduce(fn(acc, x) => acc + x, 0);
+
+print("mapped:", mapped.join(","));
+print("filtered:", filtered.join(","));
+print("total:", total);

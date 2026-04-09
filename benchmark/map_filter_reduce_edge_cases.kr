@@ -1,0 +1,23 @@
+print("=== map/filter/reduce edge cases ===");
+
+var empty = [];
+
+var emptyMapped = empty.map(fn(x:number): number => x * 2);
+print("empty map len:", len(emptyMapped));
+
+var emptyFiltered = empty.filter(fn(x:number): bool => x > 0);
+print("empty filter len:", len(emptyFiltered));
+
+try {
+    empty.reduce(fn(acc:number, x:number): number => acc + x);
+    print("unexpected: reduce(empty) should fail");
+} catch TypeError e {
+    print("caught empty reduce");
+}
+
+var single = [42];
+var singleReduce = single.reduce(fn(acc:number, x:number): number => acc + x);
+print("single reduce:", singleReduce);
+
+var withInit = empty.reduce(fn(acc:number, x:number): number => acc + x, 10);
+print("empty reduce with init:", withInit);

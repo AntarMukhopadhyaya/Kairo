@@ -34,3 +34,4 @@ func RegisterStdlibGlobals(globals []VariableInfo, slots map[string]int) {
 func PatchConstantsFromGlobals(chunk *Chunk, globals []VariableInfo, slots map[string]int) {
 	// No-op: The VM now handles this automatically
 }
+

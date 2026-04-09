@@ -1,0 +1,5 @@
+print("=== map/filter/reduce chain ===");
+
+var arr = [1, 2, 3, 4, 5];
+var chain = arr.map(fn(x) => x * 2).filter(fn(x) => x > 5).reduce(fn(acc, x) => acc + x, 0);
+print("chain:", chain);

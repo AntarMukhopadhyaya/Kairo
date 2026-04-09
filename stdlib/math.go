@@ -10,7 +10,7 @@ func init() {
 		Exports: map[string]value.Value{
 			"sqrt": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("sqrt() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -22,7 +22,7 @@ func init() {
 			}),
 			"sin": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("sin() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -34,7 +34,7 @@ func init() {
 			}),
 			"cos": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("cos() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -46,7 +46,7 @@ func init() {
 			}),
 			"floor": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("floor() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -58,7 +58,7 @@ func init() {
 			}),
 			"ceil": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("ceil() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -70,7 +70,7 @@ func init() {
 			}),
 			"abs": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("abs() takes exactly one argument", "ArgumentError", 0, 0)
 					}

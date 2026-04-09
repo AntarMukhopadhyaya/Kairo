@@ -10,7 +10,7 @@ func init() {
 		Exports: map[string]value.Value{
 			"getenv": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("getenv() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -22,7 +22,7 @@ func init() {
 			}),
 			"cwd": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 0,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 0 {
 						return value.MakeError("cwd() takes no arguments", "ArgumentError", 0, 0)
 					}
@@ -35,7 +35,7 @@ func init() {
 			}),
 			"args": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 0,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 0 {
 						return value.MakeError("args() takes no arguments", "ArgumentError", 0, 0)
 					}

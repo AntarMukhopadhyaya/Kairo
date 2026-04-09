@@ -116,3 +116,4 @@ func OpCodeName(op OpCode) string {
 	}
 	return "OP_UNKNOWN"
 }
+

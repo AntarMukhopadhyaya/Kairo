@@ -28,7 +28,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// toUpperCase(str) -> string
 	methods["toUpperCase"] = &value.InternalFunctionObject{
 		Arity: 1, // just the string itself
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || !value.IsStringLike(args[0]) {
 				return value.MakeError("toUpperCase requires string", "TypeError", 0, 0)
 			}
@@ -40,7 +40,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// toLowerCase(str) -> string
 	methods["toLowerCase"] = &value.InternalFunctionObject{
 		Arity: 1,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || !value.IsStringLike(args[0]) {
 				return value.MakeError("toLowerCase requires string", "TypeError", 0, 0)
 			}
@@ -52,7 +52,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// split(str, separator) -> array
 	methods["split"] = &value.InternalFunctionObject{
 		Arity: 2, // str + separator
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || !value.IsStringLike(args[0]) || !value.IsStringLike(args[1]) {
 				return value.MakeError("split(str, sep) requires two strings", "TypeError", 0, 0)
 			}
@@ -71,7 +71,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// charAt(str, index) -> string
 	methods["charAt"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || !value.IsStringLike(args[0]) || args[1].Kind != value.NumberKind {
 				return value.MakeError("charAt(str, index) requires string and number", "TypeError", 0, 0)
 			}
@@ -88,7 +88,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// includes(str, search) -> boolean
 	methods["includes"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || !value.IsStringLike(args[0]) || !value.IsStringLike(args[1]) {
 				return value.MakeError("includes(str, search) requires two strings", "TypeError", 0, 0)
 			}
@@ -101,7 +101,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// indexOf(str, search) -> number
 	methods["indexOf"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || !value.IsStringLike(args[0]) || !value.IsStringLike(args[1]) {
 				return value.MakeError("indexOf(str, search) requires two strings", "TypeError", 0, 0)
 			}
@@ -114,7 +114,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// trim(str) -> string
 	methods["trim"] = &value.InternalFunctionObject{
 		Arity: 1,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || !value.IsStringLike(args[0]) {
 				return value.MakeError("trim requires string", "TypeError", 0, 0)
 			}
@@ -126,7 +126,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// substring(str, start, end?) -> string
 	methods["substring"] = &value.InternalFunctionObject{
 		Arity: -1, // 2 or 3 args
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || !value.IsStringLike(args[0]) || args[1].Kind != value.NumberKind {
 				return value.MakeError("substring requires string and number", "TypeError", 0, 0)
 			}
@@ -156,7 +156,7 @@ func registerStringMethods(methods map[string]*value.InternalFunctionObject) {
 	// replace(str, search, replacement) -> string
 	methods["replace"] = &value.InternalFunctionObject{
 		Arity: 3,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 3 || !value.IsStringLike(args[0]) || !value.IsStringLike(args[1]) || !value.IsStringLike(args[2]) {
 				return value.MakeError("replace(str, search, replacement) requires three strings", "TypeError", 0, 0)
 			}
@@ -172,7 +172,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// push(arr, ...items) -> number
 	methods["push"] = &value.InternalFunctionObject{
 		Arity: -1, // variadic
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || args[0].Kind != value.ArrayKind {
 				return value.MakeError("push requires array", "TypeError", 0, 0)
 			}
@@ -190,7 +190,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// pop(arr) -> value
 	methods["pop"] = &value.InternalFunctionObject{
 		Arity: 1,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || args[0].Kind != value.ArrayKind {
 				return value.MakeError("pop requires array", "TypeError", 0, 0)
 			}
@@ -210,7 +210,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// slice(arr, start, end?) -> array
 	methods["slice"] = &value.InternalFunctionObject{
 		Arity: -1, // 2 or 3 args
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || args[0].Kind != value.ArrayKind || args[1].Kind != value.NumberKind {
 				return value.MakeError("slice requires array and number", "TypeError", 0, 0)
 			}
@@ -251,7 +251,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// join(arr, separator) -> string
 	methods["join"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || args[0].Kind != value.ArrayKind {
 				return value.MakeError("join requires array", "TypeError", 0, 0)
 			}
@@ -273,7 +273,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// reverse(arr) -> array
 	methods["reverse"] = &value.InternalFunctionObject{
 		Arity: 1,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || args[0].Kind != value.ArrayKind {
 				return value.MakeError("reverse requires array", "TypeError", 0, 0)
 			}
@@ -281,7 +281,18 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 
 			// Reverse in place
 			for i, j := 0, len(arr.Elements)-1; i < j; i, j = i+1, j-1 {
-				arr.Elements[i], arr.Elements[j] = arr.Elements[j], arr.Elements[i]
+				left := arr.Elements[i]
+				right := arr.Elements[j]
+
+				// Retain both values so each destination slot can take ownership safely.
+				value.Inc(left)
+				value.Inc(right)
+
+				value.Dec(arr.Elements[i])
+				arr.Elements[i] = right
+
+				value.Dec(arr.Elements[j])
+				arr.Elements[j] = left
 			}
 
 			return args[0]
@@ -291,7 +302,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// includes(arr, item) -> boolean
 	methods["includes"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || args[0].Kind != value.ArrayKind {
 				return value.MakeError("includes requires array", "TypeError", 0, 0)
 			}
@@ -319,7 +330,7 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 	// indexOf(arr, item) -> number
 	methods["indexOf"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || args[0].Kind != value.ArrayKind {
 				return value.MakeError("indexOf requires array", "TypeError", 0, 0)
 			}
@@ -342,13 +353,115 @@ func registerArrayMethods(methods map[string]*value.InternalFunctionObject) {
 			return value.MakeNumber(-1)
 		},
 	}
+
+	// map(arr, fn) -> array
+	methods["map"] = &value.InternalFunctionObject{
+		Arity: 2,
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
+			if len(args) < 2 || args[0].Kind != value.ArrayKind {
+				return value.MakeError("map requires array and function", "TypeError", 0, 0)
+			}
+
+			fn := args[1]
+			switch fn.Kind {
+			case value.FunctionKind, value.ClosureKind, value.InternalFunctionKind:
+				// callable
+			default:
+				return value.MakeError("map requires array and function", "TypeError", 0, 0)
+			}
+
+			arr := args[0].AsArray()
+			result := make([]value.Value, len(arr.Elements))
+			for i, elem := range arr.Elements {
+				out := vm.CallFunction(fn, []value.Value{elem})
+				if out.Kind == value.ErrorKind {
+					return out
+				}
+				result[i] = out
+			}
+			return value.MakeArray(result)
+		},
+	}
+
+	// filter(arr, fn) -> array
+	methods["filter"] = &value.InternalFunctionObject{
+		Arity: 2,
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
+			if len(args) < 2 || args[0].Kind != value.ArrayKind {
+				return value.MakeError("filter requires array and function", "TypeError", 0, 0)
+			}
+
+			fn := args[1]
+			switch fn.Kind {
+			case value.FunctionKind, value.ClosureKind, value.InternalFunctionKind:
+				// callable
+			default:
+				return value.MakeError("filter requires array and function", "TypeError", 0, 0)
+			}
+
+			arr := args[0].AsArray()
+			result := make([]value.Value, 0, len(arr.Elements))
+			for _, elem := range arr.Elements {
+				out := vm.CallFunction(fn, []value.Value{elem})
+				if out.Kind == value.ErrorKind {
+					return out
+				}
+				if out.Kind == value.BoolKind && out.Bool {
+					result = append(result, elem)
+				}
+			}
+			return value.MakeArray(result)
+		},
+	}
+
+	// reduce(arr, fn, initial?) -> value
+	methods["reduce"] = &value.InternalFunctionObject{
+		Arity: -1,
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
+			if len(args) < 2 || args[0].Kind != value.ArrayKind {
+				return value.MakeError("reduce requires array and function", "TypeError", 0, 0)
+			}
+
+			fn := args[1]
+			switch fn.Kind {
+			case value.FunctionKind, value.ClosureKind, value.InternalFunctionKind:
+				// callable
+			default:
+				return value.MakeError("reduce requires array and function", "TypeError", 0, 0)
+			}
+
+			arr := args[0].AsArray()
+			var acc value.Value
+			start := 0
+
+			if len(args) >= 3 {
+				acc = args[2]
+			} else {
+				if len(arr.Elements) == 0 {
+					return value.MakeError("reduce of empty array", "TypeError", 0, 0)
+				}
+				acc = arr.Elements[0]
+				start = 1
+			}
+
+			for i := start; i < len(arr.Elements); i++ {
+				out := vm.CallFunction(fn, []value.Value{acc, arr.Elements[i]})
+				if out.Kind == value.ErrorKind {
+					return out
+				}
+				acc = out
+			}
+
+			return acc
+		},
+	}
 }
 
 func registerMapMethods(methods map[string]*value.InternalFunctionObject) {
 	// keys(map) -> array
 	methods["keys"] = &value.InternalFunctionObject{
 		Arity: 1,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || args[0].Kind != value.MapKind {
 				return value.MakeError("keys requires map", "TypeError", 0, 0)
 			}
@@ -366,7 +479,7 @@ func registerMapMethods(methods map[string]*value.InternalFunctionObject) {
 	// values(map) -> array
 	methods["values"] = &value.InternalFunctionObject{
 		Arity: 1,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 1 || args[0].Kind != value.MapKind {
 				return value.MakeError("values requires map", "TypeError", 0, 0)
 			}
@@ -384,7 +497,7 @@ func registerMapMethods(methods map[string]*value.InternalFunctionObject) {
 	// hasKey(map, key) -> boolean
 	methods["hasKey"] = &value.InternalFunctionObject{
 		Arity: 2,
-		Call: func(args []value.Value) value.Value {
+		Call: func(vm value.CallContext, args []value.Value) value.Value {
 			if len(args) < 2 || args[0].Kind != value.MapKind || !value.IsStringLike(args[1]) {
 				return value.MakeError("hasKey(map, key) requires map and string", "TypeError", 0, 0)
 			}

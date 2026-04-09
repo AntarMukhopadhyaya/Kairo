@@ -3,6 +3,7 @@ package main
 import (
 	"Kairo/compiler"
 	"Kairo/frontend"
+	"Kairo/semantic"
 	"Kairo/value"
 	"Kairo/vm"
 
@@ -24,7 +25,31 @@ const (
 )
 
 func printDiagnostics(diags []frontend.Diagnostic) {
+	printDiagnosticsWithSource("<unknown>", "", diags)
+}
+
+func printDiagnosticsWithSource(sourceName, src string, diags []frontend.Diagnostic) {
+	lines := strings.Split(src, "\n")
 	for _, d := range diags {
+		if d.Line > 0 && d.Line <= len(lines) {
+			lineText := lines[d.Line-1]
+			col := d.Column
+			if col < 1 {
+				col = 1
+			}
+			caretLen := caretSpanLength(lineText, col)
+			if caretLen < 1 {
+				caretLen = 1
+			}
+
+			fmt.Printf(red+"Error: %s\n"+reset, d.Message)
+			fmt.Printf(" --> %s:%d:%d\n", sourceName, d.Line, col)
+			fmt.Printf("  |\n")
+			fmt.Printf("%2d | %s\n", d.Line, lineText)
+			fmt.Printf("  | %s%s\n", strings.Repeat(" ", col-1), strings.Repeat("^", caretLen))
+			continue
+		}
+
 		loc := ""
 		if d.Line > 0 {
 			loc = fmt.Sprintf(" at %d:%d", d.Line, d.Column)
@@ -35,6 +60,39 @@ func printDiagnostics(diags []frontend.Diagnostic) {
 		}
 		fmt.Printf(red+"[%s]%s %s\n"+reset, phase, loc, d.Message)
 	}
+}
+
+func caretSpanLength(line string, col int) int {
+	if col < 1 {
+		return 1
+	}
+	runes := []rune(line)
+	if len(runes) == 0 {
+		return 1
+	}
+	idx := col - 1
+	if idx >= len(runes) {
+		return 1
+	}
+
+	isStop := func(r rune) bool {
+		switch r {
+		case ' ', '\t', '\r', '\n', ',', ';', ':', '(', ')', '{', '}', '[', ']', '+', '-', '*', '/', '%', '=', '!', '<', '>', '&', '|', '.', '"', '\'':
+			return true
+		default:
+			return false
+		}
+	}
+
+	if isStop(runes[idx]) {
+		return 1
+	}
+
+	end := idx
+	for end < len(runes) && !isStop(runes[end]) {
+		end++
+	}
+	return end - idx
 }
 
 // Function to execute SlimScript source code
@@ -77,7 +135,13 @@ func executeSourceCodeWithEnv(src string, globals []vm.VariableInfo, slots map[s
 
 	program, parseDiags := parser.Parse(tokens)
 	if len(parseDiags) > 0 {
-		printDiagnostics(parseDiags)
+		printDiagnosticsWithSource("<repl>", src, parseDiags)
+		return globals
+	}
+
+	semanticDiags := semantic.Analyze(program)
+	if len(semanticDiags) > 0 {
+		printDiagnosticsWithSource("<repl>", src, semanticDiags)
 		return globals
 	}
 
@@ -88,7 +152,7 @@ func executeSourceCodeWithEnv(src string, globals []vm.VariableInfo, slots map[s
 	vm.EnsureBuiltinSlots(slots)
 	chunk, compileDiags := comp.CompileWithDiagnostics(program)
 	if len(compileDiags) > 0 {
-		printDiagnostics(compileDiags)
+		printDiagnosticsWithSource("<repl>", src, compileDiags)
 		return globals
 	}
 
@@ -145,7 +209,13 @@ func executeFile(filename string, optimize bool, profile bool) {
 	}
 	program, parseDiags := parser.Parse(tokens)
 	if len(parseDiags) > 0 {
-		printDiagnostics(parseDiags)
+		printDiagnosticsWithSource(filepath.Base(filename), string(data), parseDiags)
+		return
+	}
+
+	semanticDiags := semantic.Analyze(program)
+	if len(semanticDiags) > 0 {
+		printDiagnosticsWithSource(filepath.Base(filename), string(data), semanticDiags)
 		return
 	}
 
@@ -155,7 +225,7 @@ func executeFile(filename string, optimize bool, profile bool) {
 	vm.EnsureBuiltinSlots(slots)
 	chunk, compileDiags := comp.CompileWithDiagnostics(program)
 	if len(compileDiags) > 0 {
-		printDiagnostics(compileDiags)
+		printDiagnosticsWithSource(filepath.Base(filename), string(data), compileDiags)
 		return
 	}
 
@@ -218,7 +288,13 @@ func compileFile(inputFile string, outputFile string, optimize bool) {
 	parser := frontend.Parser{}
 	program, parseDiags := parser.Parse(tokens)
 	if len(parseDiags) > 0 {
-		printDiagnostics(parseDiags)
+		printDiagnosticsWithSource(filepath.Base(inputFile), string(data), parseDiags)
+		return
+	}
+
+	semanticDiags := semantic.Analyze(program)
+	if len(semanticDiags) > 0 {
+		printDiagnosticsWithSource(filepath.Base(inputFile), string(data), semanticDiags)
 		return
 	}
 
@@ -231,7 +307,7 @@ func compileFile(inputFile string, outputFile string, optimize bool) {
 	comp.EnableOptimizations(optimize)
 	chunk, compileDiags := comp.CompileWithDiagnostics(program)
 	if len(compileDiags) > 0 {
-		printDiagnostics(compileDiags)
+		printDiagnosticsWithSource(filepath.Base(inputFile), string(data), compileDiags)
 		return
 	}
 
@@ -349,6 +425,9 @@ func executeBytecode(filename string, profile bool) {
 
 func printVMResult(result value.Value) {
 	if result.Kind != value.ErrorKind {
+		if result.Kind == value.NullKind {
+			return
+		}
 		fmt.Println(yellow, "Result:", result.ToString(), reset)
 		return
 	}

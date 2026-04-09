@@ -1,0 +1,5 @@
+print("=== map/filter/reduce callback error ===");
+
+var arr = [1, 0, 2];
+
+arr.map(fn(x:number): number => 10 / x);

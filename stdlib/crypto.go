@@ -12,7 +12,7 @@ func init() {
 		Exports: map[string]value.Value{
 			"randomHex": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("randomHex() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -32,7 +32,7 @@ func init() {
 			}),
 			"randomInt": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("randomInt() takes exactly one argument", "ArgumentError", 0, 0)
 					}

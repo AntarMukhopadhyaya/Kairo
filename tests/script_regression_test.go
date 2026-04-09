@@ -3,6 +3,7 @@ package tests
 import (
 	"Kairo/compiler"
 	"Kairo/frontend"
+	"Kairo/semantic"
 	"Kairo/value"
 	"Kairo/vm"
 	"io"
@@ -13,10 +14,11 @@ import (
 )
 
 type scriptResult struct {
-	Output      string
-	Result      value.Value
-	ParseDiags  []frontend.Diagnostic
-	CompileDiag []frontend.Diagnostic
+	Output       string
+	Result       value.Value
+	ParseDiags   []frontend.Diagnostic
+	SemanticDiag []frontend.Diagnostic
+	CompileDiag  []frontend.Diagnostic
 }
 
 func captureStdout(t *testing.T, fn func()) string {
@@ -52,6 +54,11 @@ func runKairoSource(t *testing.T, sourceName string, source string) scriptResult
 	program, parseDiags := parser.Parse(tokens)
 	if len(parseDiags) > 0 {
 		return scriptResult{ParseDiags: parseDiags}
+	}
+
+	semanticDiags := semantic.Analyze(program)
+	if len(semanticDiags) > 0 {
+		return scriptResult{SemanticDiag: semanticDiags}
 	}
 
 	slots := make(map[string]int)
@@ -103,6 +110,12 @@ func TestBenchmarkFixturesRegressionSuite(t *testing.T) {
 		{file: "finally_edge_case.kr", expectOutput: []string{"final breakFinallyTest: 3"}},
 		{file: "inline_function.kr", expectOutput: []string{"4"}},
 		{file: "loop_control_comprehensive_test.kr", expectOutput: []string{"LOOP CONTROL COMPREHENSIVE END"}},
+		{file: "map_filter_reduce.kr", expectOutput: []string{"=== map/filter/reduce basic ===", "mapped: 2,4,6,8,10", "filtered: 2,4", "sum: 15", "original: 1,2,3,4,5"}},
+		{file: "map_filter_reduce_chain.kr", expectOutput: []string{"=== map/filter/reduce chain ===", "chain: 24"}},
+		{file: "map_filter_reduce_nested.kr", expectOutput: []string{"=== map/filter/reduce nested ===", "mapped: 3,6,9,12", "filtered: 9,12", "total: 21"}},
+		{file: "map_filter_reduce_edge_cases.kr", expectOutput: []string{"=== map/filter/reduce edge cases ===", "empty map len: 0", "empty filter len: 0", "caught empty reduce", "single reduce: 42", "empty reduce with init: 10"}},
+		{file: "map_filter_reduce_arity_error.kr", expectErrorKind: true, errorContains: "wrong number of arguments"},
+		{file: "map_filter_reduce_callback_error.kr", expectOutput: []string{"=== map/filter/reduce callback error ==="}, expectErrorKind: true, errorContains: "ZeroDivisionError"},
 		{file: "math_test.kr", expectOutput: []string{"Testing math module:"}},
 		{file: "method_dispatch_test.kr", expectOutput: []string{"=== Tests Complete ==="}},
 		{file: "short_circuit_test.kr", expectOutput: []string{"Test 4 - false || increment():"}},
@@ -129,6 +142,9 @@ func TestBenchmarkFixturesRegressionSuite(t *testing.T) {
 
 			if len(res.ParseDiags) > 0 {
 				t.Fatalf("unexpected parse diagnostics for %s: %+v", tc.file, res.ParseDiags)
+			}
+			if len(res.SemanticDiag) > 0 {
+				t.Fatalf("unexpected semantic diagnostics for %s: %+v", tc.file, res.SemanticDiag)
 			}
 			if len(res.CompileDiag) > 0 {
 				t.Fatalf("unexpected compile diagnostics for %s: %+v", tc.file, res.CompileDiag)
@@ -186,6 +202,9 @@ switch y {
 	if len(res.ParseDiags) > 0 {
 		t.Fatalf("unexpected parse diagnostics: %+v", res.ParseDiags)
 	}
+	if len(res.SemanticDiag) > 0 {
+		t.Fatalf("unexpected semantic diagnostics: %+v", res.SemanticDiag)
+	}
 	if len(res.CompileDiag) > 0 {
 		t.Fatalf("unexpected compile diagnostics: %+v", res.CompileDiag)
 	}
@@ -211,6 +230,9 @@ switch x {
 	res := runKairoSource(t, "switch_no_fallthrough", source)
 	if len(res.ParseDiags) > 0 {
 		t.Fatalf("unexpected parse diagnostics: %+v", res.ParseDiags)
+	}
+	if len(res.SemanticDiag) > 0 {
+		t.Fatalf("unexpected semantic diagnostics: %+v", res.SemanticDiag)
 	}
 	if len(res.CompileDiag) > 0 {
 		t.Fatalf("unexpected compile diagnostics: %+v", res.CompileDiag)
@@ -262,5 +284,39 @@ switch x {
 	_, diags := parser.Parse(tokens)
 	if len(diags) == 0 {
 		t.Fatalf("expected parse diagnostics for malformed case clause")
+	}
+}
+
+func TestArrayMapFilterReduceMethods(t *testing.T) {
+	source := `
+var arr = [1, 2, 3];
+var mapped = arr.map(fn(x:number): number => x * 2);
+print(mapped.join(","));
+
+var filtered = arr.filter(fn(x:number): bool => x > 1);
+print(filtered.join(","));
+
+var reduced = arr.reduce(fn(acc:number, x:number): number => acc + x, 0);
+print(reduced);
+`
+
+	res := runKairoSource(t, "array_map_filter_reduce", source)
+	if len(res.ParseDiags) > 0 {
+		t.Fatalf("unexpected parse diagnostics: %+v", res.ParseDiags)
+	}
+	if len(res.SemanticDiag) > 0 {
+		t.Fatalf("unexpected semantic diagnostics: %+v", res.SemanticDiag)
+	}
+	if len(res.CompileDiag) > 0 {
+		t.Fatalf("unexpected compile diagnostics: %+v", res.CompileDiag)
+	}
+	if res.Result.Kind == value.ErrorKind {
+		t.Fatalf("unexpected runtime error: %s", res.Result.ToString())
+	}
+
+	for _, want := range []string{"2,4,6", "2,3", "6"} {
+		if !strings.Contains(res.Output, want) {
+			t.Fatalf("output missing %q\nactual output:\n%s", want, res.Output)
+		}
 	}
 }

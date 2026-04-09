@@ -31,7 +31,7 @@ func init() {
 		},
 	})
 }
-func upperFn(args []value.Value) value.Value {
+func upperFn(_ value.CallContext, args []value.Value) value.Value {
 	if len(args) != 1 {
 		return value.MakeError("upper() takes exactly one argument", "ArgumentError", 0, 0)
 	}
@@ -41,7 +41,7 @@ func upperFn(args []value.Value) value.Value {
 	str := args[0].ToString()
 	return value.MakeString(strings.ToUpper(str))
 }
-func lowerFn(args []value.Value) value.Value {
+func lowerFn(_ value.CallContext, args []value.Value) value.Value {
 	if len(args) != 1 {
 		return value.MakeError("lower() takes exactly one argument", "ArgumentError", 0, 0)
 	}
@@ -51,7 +51,7 @@ func lowerFn(args []value.Value) value.Value {
 	str := args[0].ToString()
 	return value.MakeString(strings.ToLower(str))
 }
-func stripFn(args []value.Value) value.Value {
+func stripFn(_ value.CallContext, args []value.Value) value.Value {
 	if len(args) != 1 {
 		return value.MakeError("strip() takes exactly one string argument", "ArgumentError", 0, 0)
 	}
@@ -61,7 +61,7 @@ func stripFn(args []value.Value) value.Value {
 	str := args[0].ToString()
 	return value.MakeString(strings.TrimSpace(str))
 }
-func splitFn(args []value.Value) value.Value {
+func splitFn(_ value.CallContext, args []value.Value) value.Value {
 	if len(args) < 1 || len(args) > 2 {
 		return value.MakeError("split() takes one or two string arguments", "ArgumentError", 0, 0)
 	}
@@ -83,7 +83,7 @@ func splitFn(args []value.Value) value.Value {
 	}
 	return value.MakeArray(values)
 }
-func joinFn(args []value.Value) value.Value {
+func joinFn(_ value.CallContext, args []value.Value) value.Value {
 	if len(args) < 1 || len(args) > 2 {
 		return value.MakeError("join() takes one or two arguments", "ArgumentError", 0, 0)
 	}

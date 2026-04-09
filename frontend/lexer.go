@@ -216,6 +216,33 @@ func (l *Lexer) Tokenize(sourceCode string) ([]Token, error) {
 				tokens = append(tokens, Token{DivideEquals, src[0] + src[1], l.lineNumber, l.columNumber})
 				src = src[2:]
 				l.columNumber += 2
+			} else if len(src) > 1 && src[1] == "/" {
+				// Single-line comment, skip until end of line
+				src = src[2:]
+				l.columNumber += 2
+				for len(src) > 0 && src[0] != "\n" {
+					src = src[1:]
+					l.columNumber++
+				}
+			} else if len(src) > 1 && src[1] == "*" {
+				// Multi-line comment, skip until closing */
+				src = src[2:]
+				l.columNumber += 2
+				for len(src) > 1 && !(src[0] == "*" && src[1] == "/") {
+					if src[0] == "\n" {
+						l.lineNumber++
+						l.columNumber = 1
+					} else {
+						l.columNumber++
+					}
+					src = src[1:]
+				}
+				if len(src) > 1 {
+					src = src[2:] // Skip the closing */
+					l.columNumber += 2
+				} else {
+					return nil, errors.New("unterminated multi-line comment")
+				}
 			} else {
 				tokens = append(tokens, Token{BinaryOperator, src[0], l.lineNumber, l.columNumber})
 				src = src[1:]

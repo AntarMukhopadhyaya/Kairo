@@ -584,9 +584,35 @@ func (p *Parser) parseMultiplicativeExpression() Expression {
 
 func (p *Parser) parseCallMemberExpression() Expression {
 	member := p.parseMemberExpression()
-	if p.at().Type == OpenParam {
-		return p.parseCallExpression(member)
+	for {
+		if p.at().Type == OpenParam {
+			member = p.parseCallExpression(member)
+			continue
+		}
+		if p.at().Type == Dot || p.at().Type == OpenBracket {
+			operator := p.consume()
+			var property Expression
+			var computed bool
+
+			if operator.Type == Dot {
+				computed = false
+				property = p.parsePrimaryExpression()
+				if property.GetKind() != IdentifierNodeType {
+					panic("Expected Identifier")
+				}
+			} else {
+				computed = true
+				property = p.parseExpression()
+				p.expect(CloseBracket, "Expected ]")
+			}
+
+			member = MemberExpression{Kind: MemberExpressionNodeType, Object: member, Property: property, Computed: computed, Line: operator.LineNumber, Column: operator.Column}
+			continue
+		}
+
+		break
 	}
+
 	return member
 }
 func (p *Parser) parseCallExpression(caller Expression) Expression {

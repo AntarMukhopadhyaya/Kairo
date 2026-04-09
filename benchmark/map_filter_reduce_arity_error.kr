@@ -1,0 +1,4 @@
+print("=== map/filter/reduce arity error ===");
+
+var arr = [1, 2, 3];
+arr.map(fn(x, y) => x + y);

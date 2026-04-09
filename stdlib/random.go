@@ -12,7 +12,7 @@ func init() {
 		Exports: map[string]value.Value{
 			"random": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 0,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 0 {
 						return value.MakeError("random() takes no arguments", "ArgumentError", 0, 0)
 					}
@@ -21,7 +21,7 @@ func init() {
 			}),
 			"randint": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("randint() takes exactly one argument", "ArgumentError", 0, 0)
 					}
@@ -36,7 +36,7 @@ func init() {
 			}),
 			"seed": value.MakeInternalFunction(&value.InternalFunctionObject{
 				Arity: 1,
-				Call: func(args []value.Value) value.Value {
+				Call: func(vm value.CallContext, args []value.Value) value.Value {
 					if len(args) != 1 {
 						return value.MakeError("seed() takes exactly one argument", "ArgumentError", 0, 0)
 					}

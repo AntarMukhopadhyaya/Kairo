@@ -1,0 +1,21 @@
+print("=== map/filter/reduce basic ===");
+// This is a comment
+var arr = [1, 2, 3, 4, 5];
+/*
+This is a Multi Line comment
+*/
+var mapped = arr.map(fn(x:number): number => x * 2);
+print("mapped:", mapped.join(","));
+
+var filtered = arr.filter(fn(x:number): bool => x % 2 == 0);
+print("filtered:", filtered.join(","));
+
+var sum = arr.reduce(fn(acc:number, x:number): number => acc + x, 0);
+print("sum:", sum);
+
+print("original:", arr.join(","));
+var chain = arr
+        .map(fn(x) => x * 2)
+        .filter(fn(x) => x > 5)
+        .reduce(fn(acc,x) => acc + x, 0);
+print(chain);
