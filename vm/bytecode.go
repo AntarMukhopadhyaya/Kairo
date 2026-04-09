@@ -670,4 +670,3 @@ func (br *BytecodeReader) readGlobalSlots() (map[string]int, error) {
 
 	return slots, nil
 }
-

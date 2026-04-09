@@ -1405,4 +1405,3 @@ func (c *Compiler) emitContinueJump() int {
 	loop.continueJumps = append(loop.continueJumps, jumpIndex)
 	return jumpIndex
 }
-

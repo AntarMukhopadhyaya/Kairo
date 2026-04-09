@@ -48,4 +48,3 @@ func (c *Chunk) EmitAt(op OpCode, a, b, c2 int, line int, column int, extra ...i
 		Column: column,
 	})
 }
-

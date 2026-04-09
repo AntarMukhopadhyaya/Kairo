@@ -50,4 +50,3 @@ func AsClosure(v value.Value) *ClosureObject {
 	}
 	return v.Obj.Data.(*ClosureObject)
 }
-

@@ -422,4 +422,3 @@ func (o *Optimizer) peepholeOptimize() {
 func (o *Optimizer) GetStats() OptimizationStats {
 	return o.stats
 }
-

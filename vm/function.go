@@ -20,4 +20,3 @@ type FunctionObject struct {
 
 // Backward-compatible alias.
 type Function = FunctionObject
-
